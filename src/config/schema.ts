@@ -57,13 +57,18 @@ export const BatchingConfigSchema = z.object({
 
 /**
  * Complete tuning configuration schema.
+ *
+ * Note: In Zod 4, .default({}) no longer works for objects with property defaults.
+ * We use .default(() => Schema.parse({})) to apply nested defaults correctly.
  */
 export const TuningConfigSchema = z.object({
-  timeouts: TimeoutsConfigSchema.default({}),
-  retry: RetryConfigSchema.default({}),
-  token_estimates: TokenEstimatesConfigSchema.default({}),
-  limits: LimitsConfigSchema.default({}),
-  batching: BatchingConfigSchema.default({}),
+  timeouts: TimeoutsConfigSchema.default(() => TimeoutsConfigSchema.parse({})),
+  retry: RetryConfigSchema.default(() => RetryConfigSchema.parse({})),
+  token_estimates: TokenEstimatesConfigSchema.default(() =>
+    TokenEstimatesConfigSchema.parse({}),
+  ),
+  limits: LimitsConfigSchema.default(() => LimitsConfigSchema.parse({})),
+  batching: BatchingConfigSchema.default(() => BatchingConfigSchema.parse({})),
 });
 
 /**
@@ -232,11 +237,17 @@ export const ConflictDetectionConfigSchema = z.object({
 export const EvalConfigSchema = z.object({
   plugin: PluginConfigSchema,
   marketplace: MarketplaceConfigSchema.optional(),
-  scope: ScopeConfigSchema.default({}),
-  generation: GenerationConfigSchema.default({}),
-  execution: ExecutionConfigSchema.default({}),
-  evaluation: EvaluationConfigSchema.default({}),
-  output: OutputConfigSchema.default({}),
+  scope: ScopeConfigSchema.default(() => ScopeConfigSchema.parse({})),
+  generation: GenerationConfigSchema.default(() =>
+    GenerationConfigSchema.parse({}),
+  ),
+  execution: ExecutionConfigSchema.default(() =>
+    ExecutionConfigSchema.parse({}),
+  ),
+  evaluation: EvaluationConfigSchema.default(() =>
+    EvaluationConfigSchema.parse({}),
+  ),
+  output: OutputConfigSchema.default(() => OutputConfigSchema.parse({})),
   resume: ResumeConfigSchema.optional(),
   fast_mode: FastModeConfigSchema.optional(),
   tuning: TuningConfigSchema.optional(),

@@ -195,18 +195,26 @@ export function estimateEvaluationCost(
 export function calculateComponentCounts(
   analysis: AnalysisOutput,
   config: EvalConfig,
-): { skills: number; agents: number; commands: number; total: number } {
+): {
+  skills: number;
+  agents: number;
+  commands: number;
+  hooks: number;
+  total: number;
+} {
   const skills = config.scope.skills ? analysis.components.skills.length : 0;
   const agents = config.scope.agents ? analysis.components.agents.length : 0;
   const commands = config.scope.commands
     ? analysis.components.commands.length
     : 0;
+  const hooks = config.scope.hooks ? analysis.components.hooks.length : 0;
 
   return {
     skills,
     agents,
     commands,
-    total: skills + agents + commands,
+    hooks,
+    total: skills + agents + commands + hooks,
   };
 }
 
@@ -225,12 +233,13 @@ export function estimateScenarioCount(
   const scenariosPerComponent = config.generation.scenarios_per_component;
 
   // Skills and agents use LLM generation with scenarios_per_component
-  // Commands use deterministic generation with ~5 scenarios each
+  // Commands and hooks use deterministic generation with ~5 scenarios each
   const skillScenarios = counts.skills * scenariosPerComponent;
   const agentScenarios = counts.agents * scenariosPerComponent;
   const commandScenarios = counts.commands * 5; // Fixed scenarios per command
+  const hookScenarios = counts.hooks * 5; // Fixed scenarios per hook
 
-  return skillScenarios + agentScenarios + commandScenarios;
+  return skillScenarios + agentScenarios + commandScenarios + hookScenarios;
 }
 
 /**
@@ -253,7 +262,8 @@ export function estimatePipelineCost(
   const genInputTokens =
     counts.skills * tuning.token_estimates.per_skill +
     counts.agents * tuning.token_estimates.per_agent +
-    counts.commands * tuning.token_estimates.per_command;
+    counts.commands * tuning.token_estimates.per_command +
+    counts.hooks * tuning.token_estimates.per_hook;
   const genOutputTokens =
     counts.skills *
       TOKENS_PER_SCENARIO.skill *
@@ -261,7 +271,8 @@ export function estimatePipelineCost(
     counts.agents *
       TOKENS_PER_SCENARIO.agent *
       config.generation.scenarios_per_component +
-    counts.commands * TOKENS_PER_SCENARIO.command * 5;
+    counts.commands * TOKENS_PER_SCENARIO.command * 5 +
+    counts.hooks * TOKENS_PER_SCENARIO.hook * 5;
 
   stages.push({
     stage: "generation",

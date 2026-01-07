@@ -28,8 +28,10 @@ import {
 import { runJudgment } from "./multi-sampler.js";
 import {
   detectAllComponents,
+  detectAllComponentsWithHooks,
   getUniqueDetections,
   wasExpectedComponentTriggered,
+  wasExpectedHookTriggered,
 } from "./programmatic-detector.js";
 
 import type {
@@ -181,20 +183,37 @@ async function evaluateScenario(
   const evalConfig = config.evaluation;
 
   // 1. Programmatic detection (PRIMARY)
-  const detections = detectAllComponents(
-    execution.detected_tools,
-    execution.transcript,
-    scenario,
-  );
+  // Use hook-aware detection for hook scenarios
+  const detections =
+    scenario.component_type === "hook"
+      ? detectAllComponentsWithHooks(
+          execution.detected_tools,
+          execution.transcript,
+          scenario,
+          execution.hook_responses,
+        )
+      : detectAllComponents(
+          execution.detected_tools,
+          execution.transcript,
+          scenario,
+        );
 
   const uniqueDetections = getUniqueDetections(detections);
 
   // Check if expected component triggered
-  const triggered = wasExpectedComponentTriggered(
-    uniqueDetections,
-    scenario.expected_component,
-    scenario.component_type,
-  );
+  // Use hook-specific detection for hook scenarios
+  const triggered =
+    scenario.component_type === "hook"
+      ? wasExpectedHookTriggered(
+          execution.hook_responses ?? [],
+          scenario.expected_component,
+          scenario.component_ref.split("::")[0], // Extract event type from "EventType::Matcher"
+        )
+      : wasExpectedComponentTriggered(
+          uniqueDetections,
+          scenario.expected_component,
+          scenario.component_type,
+        );
 
   // 2. Conflict analysis
   const conflictAnalysis = calculateConflictSeverity(
@@ -488,10 +507,12 @@ function saveEvaluationResults(
 // Re-export components for direct use
 export {
   detectAllComponents,
+  detectAllComponentsWithHooks,
   detectFromCaptures,
   detectFromTranscript,
   detectDirectCommandInvocation,
   wasExpectedComponentTriggered,
+  wasExpectedHookTriggered,
   getUniqueDetections,
 } from "./programmatic-detector.js";
 

@@ -199,6 +199,134 @@ describe("loadState", () => {
 
     expect(result).toBeNull();
   });
+
+  describe("backward compatibility migration", () => {
+    it("migrates legacy state without hooks to include empty hooks", () => {
+      // Legacy state from before hooks feature
+      const legacyState = {
+        run_id: "legacy-run",
+        plugin_name: "test-plugin",
+        stage: "analysis",
+        timestamp: "2024-01-01T00:00:00.000Z",
+        config: { plugin: { path: "/test" } } as EvalConfig,
+        analysis: {
+          plugin_name: "test-plugin",
+          plugin_load_result: {} as never,
+          components: {
+            skills: [{ name: "skill1" } as never],
+            agents: [{ name: "agent1" } as never],
+            commands: [],
+            // NO hooks field (legacy state)
+          },
+          trigger_understanding: {
+            skills: { skill1: { triggers: ["test"], description: "test" } },
+            agents: { agent1: { examples: [], description: "test" } },
+            commands: {},
+            // NO hooks field (legacy state)
+          },
+        },
+      };
+
+      vi.mocked(readJson).mockReturnValue(legacyState);
+
+      const result = loadState("test-plugin", "legacy-run");
+
+      expect(result).not.toBeNull();
+      expect(result?.analysis?.components.hooks).toEqual([]);
+      expect(result?.analysis?.trigger_understanding.hooks).toEqual({});
+    });
+
+    it("returns state unchanged when hooks field already exists", () => {
+      const modernState = {
+        run_id: "modern-run",
+        plugin_name: "test-plugin",
+        stage: "analysis",
+        timestamp: "2024-01-01T00:00:00.000Z",
+        config: { plugin: { path: "/test" } } as EvalConfig,
+        analysis: {
+          plugin_name: "test-plugin",
+          plugin_load_result: {} as never,
+          components: {
+            skills: [],
+            agents: [],
+            commands: [],
+            hooks: [], // Already present
+          },
+          trigger_understanding: {
+            skills: {},
+            agents: {},
+            commands: {},
+            hooks: {}, // Already present
+          },
+        },
+      };
+
+      vi.mocked(readJson).mockReturnValue(modernState);
+
+      const result = loadState("test-plugin", "modern-run");
+
+      expect(result).not.toBeNull();
+      expect(result?.analysis?.components.hooks).toEqual([]);
+      expect(result?.analysis?.trigger_understanding.hooks).toEqual({});
+    });
+
+    it("returns state unchanged when analysis is missing", () => {
+      const earlyState = {
+        run_id: "early-run",
+        plugin_name: "test-plugin",
+        stage: "pending",
+        timestamp: "2024-01-01T00:00:00.000Z",
+        config: { plugin: { path: "/test" } } as EvalConfig,
+        // NO analysis field (early pipeline stage)
+      };
+
+      vi.mocked(readJson).mockReturnValue(earlyState);
+
+      const result = loadState("test-plugin", "early-run");
+
+      expect(result).not.toBeNull();
+      expect(result?.analysis).toBeUndefined();
+    });
+
+    it("preserves existing hooks data when present", () => {
+      const stateWithHooks = {
+        run_id: "hooks-run",
+        plugin_name: "test-plugin",
+        stage: "analysis",
+        timestamp: "2024-01-01T00:00:00.000Z",
+        config: { plugin: { path: "/test" } } as EvalConfig,
+        analysis: {
+          plugin_name: "test-plugin",
+          plugin_load_result: {} as never,
+          components: {
+            skills: [],
+            agents: [],
+            commands: [],
+            hooks: [{ name: "hook1", eventType: "PreToolUse" } as never],
+          },
+          trigger_understanding: {
+            skills: {},
+            agents: {},
+            commands: {},
+            hooks: {
+              hook1: { eventType: "PreToolUse", matcher: ".*" } as never,
+            },
+          },
+        },
+      };
+
+      vi.mocked(readJson).mockReturnValue(stateWithHooks);
+
+      const result = loadState("test-plugin", "hooks-run");
+
+      expect(result?.analysis?.components.hooks).toHaveLength(1);
+      expect(result?.analysis?.components.hooks[0]).toEqual({
+        name: "hook1",
+        eventType: "PreToolUse",
+      });
+      expect(result?.analysis?.trigger_understanding.hooks.hook1).toBeDefined();
+    });
+  });
 });
 
 describe("updateStateAfterAnalysis", () => {
@@ -703,6 +831,7 @@ describe("formatState", () => {
           skills: [{ name: "s1" } as never, { name: "s2" } as never],
           agents: [{ name: "a1" } as never],
           commands: [],
+          hooks: [],
         },
       },
     };

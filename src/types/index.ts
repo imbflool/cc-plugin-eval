@@ -110,6 +110,7 @@ export type {
   SkillTriggerInfo,
   AgentTriggerInfo,
   CommandTriggerInfo,
+  HookTriggerInfo,
   AnalysisOutput,
   PipelineState,
 } from "./state.js";

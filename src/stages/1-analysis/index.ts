@@ -12,6 +12,7 @@ import {
   getCommandInvocation,
   parseArgumentHint,
 } from "./command-analyzer.js";
+import { analyzeHook } from "./hook-analyzer.js";
 import {
   discoverAgentFiles,
   discoverCommandFiles,
@@ -28,6 +29,7 @@ import type {
   PluginLoadResult,
   AgentTriggerInfo,
   CommandTriggerInfo,
+  HookTriggerInfo,
   SkillTriggerInfo,
 } from "../../types/index.js";
 
@@ -76,9 +78,11 @@ export async function runAnalysis(config: EvalConfig): Promise<AnalysisOutput> {
   const commands = config.scope.commands
     ? analyzeCommands(commandFiles, pluginName)
     : [];
+  const hooks =
+    config.scope.hooks && paths.hooks ? analyzeHook(paths.hooks) : [];
 
   logger.info(
-    `Analyzed: ${String(skills.length)} skills, ${String(agents.length)} agents, ${String(commands.length)} commands`,
+    `Analyzed: ${String(skills.length)} skills, ${String(agents.length)} agents, ${String(commands.length)} commands, ${String(hooks.length)} hooks`,
   );
 
   // 6. Build trigger understanding
@@ -103,6 +107,16 @@ export async function runAnalysis(config: EvalConfig): Promise<AnalysisOutput> {
     commandTriggers[command.name] = {
       invocation: getCommandInvocation(command),
       arguments: parseArgumentHint(command.argument_hint),
+    };
+  }
+
+  const hookTriggers: Record<string, HookTriggerInfo> = {};
+  for (const hook of hooks) {
+    hookTriggers[hook.name] = {
+      eventType: hook.eventType,
+      matcher: hook.matcher,
+      matchingTools: hook.matchingTools,
+      expectedBehavior: hook.expectedBehavior,
     };
   }
 
@@ -138,11 +152,13 @@ export async function runAnalysis(config: EvalConfig): Promise<AnalysisOutput> {
       skills,
       agents,
       commands,
+      hooks,
     },
     trigger_understanding: {
       skills: skillTriggers,
       agents: agentTriggers,
       commands: commandTriggers,
+      hooks: hookTriggers,
     },
   };
 
@@ -177,3 +193,9 @@ export {
   getCommandInvocation,
   parseArgumentHint,
 } from "./command-analyzer.js";
+export {
+  analyzeHook,
+  analyzeHooks,
+  parseMatcherToTools,
+  inferExpectedBehavior,
+} from "./hook-analyzer.js";

@@ -11,6 +11,7 @@ import { getModelPricing } from "../../config/pricing.js";
 import { logger } from "../../utils/logging.js";
 import { withRetry } from "../../utils/retry.js";
 
+import { createHookResponseCollector } from "./hook-capture.js";
 import {
   executeQuery,
   isErrorMessage,
@@ -202,6 +203,9 @@ export async function executeScenario(
   const detectedTools: ToolCapture[] = [];
   const errors: TranscriptErrorEvent[] = [];
 
+  // Create hook response collector for capturing SDK hook messages
+  const hookCollector = createHookResponseCollector();
+
   // Abort controller for timeout handling
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeout_ms);
@@ -239,6 +243,9 @@ export async function executeScenario(
       for await (const message of q) {
         messages.push(message);
 
+        // Process message for hook responses
+        hookCollector.processMessage(message);
+
         // Capture errors for transcript
         if (isErrorMessage(message)) {
           errors.push({
@@ -272,6 +279,7 @@ export async function executeScenario(
     scenario_id: scenario.id,
     transcript: buildTranscript(context, messages, errors),
     detected_tools: detectedTools,
+    hook_responses: hookCollector.responses,
     cost_usd: metrics.costUsd,
     api_duration_ms: metrics.durationMs,
     num_turns: metrics.numTurns,
@@ -305,6 +313,9 @@ export async function executeScenarioWithCheckpoint(
   const detectedTools: ToolCapture[] = [];
   const errors: TranscriptErrorEvent[] = [];
   let userMessageId: string | undefined;
+
+  // Create hook response collector for capturing SDK hook messages
+  const hookCollector = createHookResponseCollector();
 
   // Abort controller for timeout handling
   const controller = new AbortController();
@@ -364,6 +375,9 @@ export async function executeScenarioWithCheckpoint(
       for await (const message of q) {
         messages.push(message);
 
+        // Process message for hook responses
+        hookCollector.processMessage(message);
+
         // Capture user message ID for potential rewind
         if (isUserMessage(message) && message.id) {
           userMessageId = message.id;
@@ -415,6 +429,7 @@ export async function executeScenarioWithCheckpoint(
     scenario_id: scenario.id,
     transcript: buildTranscript(context, messages, errors),
     detected_tools: detectedTools,
+    hook_responses: hookCollector.responses,
     cost_usd: metrics.costUsd,
     api_duration_ms: metrics.durationMs,
     num_turns: metrics.numTurns,

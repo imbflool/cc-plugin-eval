@@ -7,6 +7,9 @@ import type {
   AgentExample,
   AgentComponent,
   CommandComponent,
+  HookComponent,
+  HookEventType,
+  HookExpectedBehavior,
   SkillComponent,
 } from "./components.js";
 import type { PluginLoadResult } from "./plugin.js";
@@ -47,6 +50,16 @@ export interface CommandTriggerInfo {
 }
 
 /**
+ * Trigger understanding for hooks.
+ */
+export interface HookTriggerInfo {
+  eventType: HookEventType;
+  matcher: string;
+  matchingTools: string[];
+  expectedBehavior: HookExpectedBehavior;
+}
+
+/**
  * Output from Stage 1: Analysis.
  */
 export interface AnalysisOutput {
@@ -56,11 +69,13 @@ export interface AnalysisOutput {
     skills: SkillComponent[];
     agents: AgentComponent[];
     commands: CommandComponent[];
+    hooks: HookComponent[];
   };
   trigger_understanding: {
     skills: Record<string, SkillTriggerInfo>;
     agents: Record<string, AgentTriggerInfo>;
     commands: Record<string, CommandTriggerInfo>;
+    hooks: Record<string, HookTriggerInfo>;
   };
 }
 

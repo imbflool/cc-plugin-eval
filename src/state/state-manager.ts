@@ -196,6 +196,62 @@ export function saveState(state: PipelineState): string {
 }
 
 /**
+ * Migrate state from older versions.
+ *
+ * Handles backward compatibility by adding default values for new fields.
+ * Currently migrates:
+ * - analysis.components.hooks: defaults to []
+ * - analysis.trigger_understanding.hooks: defaults to {}
+ *
+ * @param state - Loaded state (potentially from older version)
+ * @returns Migrated state with all required fields
+ */
+function migrateState(state: PipelineState): PipelineState {
+  // If no analysis present, nothing to migrate
+  if (!state.analysis) {
+    return state;
+  }
+
+  // Check if migration is needed (hooks field missing from components)
+  const needsMigration = !("hooks" in state.analysis.components);
+
+  if (!needsMigration) {
+    return state;
+  }
+
+  // Migrate by adding default hooks fields
+  // Use type assertion to handle partial legacy state
+  const legacyComponents = state.analysis.components as {
+    skills: typeof state.analysis.components.skills;
+    agents: typeof state.analysis.components.agents;
+    commands: typeof state.analysis.components.commands;
+    hooks?: typeof state.analysis.components.hooks;
+  };
+
+  const legacyTriggers = state.analysis.trigger_understanding as {
+    skills: typeof state.analysis.trigger_understanding.skills;
+    agents: typeof state.analysis.trigger_understanding.agents;
+    commands: typeof state.analysis.trigger_understanding.commands;
+    hooks?: typeof state.analysis.trigger_understanding.hooks;
+  };
+
+  return {
+    ...state,
+    analysis: {
+      ...state.analysis,
+      components: {
+        ...legacyComponents,
+        hooks: legacyComponents.hooks ?? [],
+      },
+      trigger_understanding: {
+        ...legacyTriggers,
+        hooks: legacyTriggers.hooks ?? {},
+      },
+    },
+  };
+}
+
+/**
  * Load pipeline state from disk.
  *
  * @param pluginName - Plugin name
@@ -211,7 +267,8 @@ export function loadState(
   try {
     const state = readJson(filePath) as PipelineState;
     logger.debug(`State loaded from ${filePath}`);
-    return state;
+    // Migrate old state files to include hooks fields
+    return migrateState(state);
   } catch {
     logger.warn(`No state found at ${filePath}`);
     return null;
@@ -564,7 +621,8 @@ export function formatState(state: PipelineState): string {
     const componentCount =
       state.analysis.components.skills.length +
       state.analysis.components.agents.length +
-      state.analysis.components.commands.length;
+      state.analysis.components.commands.length +
+      state.analysis.components.hooks.length;
     lines.push(`Components: ${String(componentCount)}`);
   }
 

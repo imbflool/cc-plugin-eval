@@ -31,6 +31,7 @@ import {
   formatPipelineCostEstimate,
 } from "./cost-estimator.js";
 import { calculateDiversityMetrics } from "./diversity-manager.js";
+import { generateAllHookScenarios } from "./hook-scenario-generator.js";
 import {
   generateAllSkillScenarios,
   createFallbackSkillScenarios,
@@ -64,7 +65,7 @@ export interface GenerationOutput {
  * Generation progress callback.
  */
 export type GenerationProgressCallback = (
-  stage: "skills" | "agents" | "commands" | "semantic",
+  stage: "skills" | "agents" | "commands" | "hooks" | "semantic",
   completed: number,
   total: number,
   current?: string,
@@ -214,6 +215,19 @@ export async function runGeneration(
     );
   }
 
+  // Generate hook scenarios (deterministic - no LLM)
+  if (config.scope.hooks && analysis.components.hooks.length > 0) {
+    logger.info(
+      `Generating scenarios for ${String(analysis.components.hooks.length)} hooks...`,
+    );
+
+    const hookScenarios = generateAllHookScenarios(analysis.components.hooks);
+    allScenarios.push(...hookScenarios);
+
+    onProgress?.("hooks", 1, 1);
+    logger.success(`Generated ${String(hookScenarios.length)} hook scenarios`);
+  }
+
   // Calculate diversity metrics
   const metrics = calculateDiversityMetrics(allScenarios);
 
@@ -241,6 +255,12 @@ export async function runGeneration(
 
 // Re-export for convenience
 export { generateAllCommandScenarios } from "./command-scenario-generator.js";
+
+export {
+  generateAllHookScenarios,
+  getExpectedHookScenarioCount,
+  getToolPrompt,
+} from "./hook-scenario-generator.js";
 
 export {
   generateAllSkillScenarios,

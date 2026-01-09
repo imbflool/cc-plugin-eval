@@ -29,8 +29,4 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Run markdownlint
-        uses: articulate/actions-markdownlint@17b8abe7407cd17590c006ecc837c35e1ac3ed83 # v1.1.0
-        with:
-          config: .markdownlint.json
-          files: "**/*.md"
-          ignore: node_modules
+        run: npx markdownlint-cli2@0.17.2 "**/*.md" "#node_modules"

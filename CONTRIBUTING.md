@@ -13,7 +13,7 @@ By participating, you agree to uphold this code.
 | Type                      | Description                                                   |
 | ------------------------- | ------------------------------------------------------------- |
 | **Stage Improvements**    | Enhance analysis, generation, execution, or evaluation stages |
-| **New Component Support** | Add hooks or MCP server evaluation (Phase 2-3)                |
+| **New Component Support** | Add evaluation for new plugin component types                 |
 | **Detection Methods**     | Improve programmatic detection or LLM judgment                |
 | **Output Formats**        | Add new report formats (e.g., HTML, Markdown)                 |
 | **Bug Fixes**             | Fix issues in parsing, execution, or metrics calculation      |
@@ -38,6 +38,7 @@ tests/
 ├── unit/                 # Unit tests (mirror src/ structure)
 │   └── stages/           # Per-stage test files
 ├── integration/          # Integration tests for full stages
+├── e2e/                  # End-to-end tests (real SDK calls)
 ├── mocks/                # Mock implementations for testing
 └── fixtures/             # Test data and mock plugins
 ```

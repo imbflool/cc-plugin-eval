@@ -18,13 +18,16 @@ Claude Code plugins contain multiple component types (skills, agents, commands) 
 
 ## Features
 
-- **4-Stage Pipeline**: Analysis → Generation → Execution → Evaluation
-- **Multi-Component Support**: Skills, agents, commands, hooks, and MCP servers
-- **Programmatic Detection**: 100% confidence detection by parsing tool captures
-- **Semantic Testing**: Synonym and paraphrase variations to test trigger robustness
-- **Resume Capability**: Checkpoint after each stage, resume interrupted runs
-- **Cost Estimation**: Token and USD estimates before execution
-- **Multiple Output Formats**: JSON, YAML, JUnit XML, TAP
+| Feature                    | Description                                              |
+| -------------------------- | -------------------------------------------------------- |
+| **4-Stage Pipeline**       | Analysis → Generation → Execution → Evaluation           |
+| **Multi-Component**        | Skills, agents, commands, hooks, and MCP servers         |
+| **Programmatic Detection** | 100% confidence detection by parsing tool captures       |
+| **Semantic Testing**       | Synonym and paraphrase variations to test robustness     |
+| **Resume Capability**      | Checkpoint after each stage, resume interrupted runs     |
+| **Cost Estimation**        | Token and USD estimates before execution                 |
+| **Batch API Support**      | 50% cost savings on large runs via Anthropic Batches API |
+| **Multiple Formats**       | JSON, YAML, JUnit XML, TAP output                        |
 
 ## Quick Start
 
@@ -46,21 +49,21 @@ npm install
 # Build
 npm run build
 
-# Create .env file
+# Create .env file with your API key
 echo "ANTHROPIC_API_KEY=sk-ant-your-key-here" > .env
 ```
 
 ### Run Your First Evaluation
 
 ```bash
-# Full pipeline evaluation
-npx cc-plugin-eval run -p ./path/to/your/plugin
-
-# Dry-run to see cost estimates without execution
+# See cost estimate without running (recommended first)
 npx cc-plugin-eval run -p ./path/to/your/plugin --dry-run
+
+# Run full evaluation
+npx cc-plugin-eval run -p ./path/to/your/plugin
 ```
 
-## Architecture
+## How It Works
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -106,7 +109,7 @@ Each component generates multiple scenario types to thoroughly test triggering:
 | `negative`    | Should NOT trigger           | "tell me about database skills"        |
 | `semantic`    | Synonym variations           | "generate a skill" vs "create a skill" |
 
-## CLI Commands
+## CLI Reference
 
 ### Full Pipeline
 
@@ -147,7 +150,7 @@ cc-plugin-eval list -p ./plugin
 cc-plugin-eval report -r <run-id> --output junit-xml
 ```
 
-### Key Options
+### Common Options
 
 | Option                | Description                                       |
 | --------------------- | ------------------------------------------------- |
@@ -163,34 +166,46 @@ cc-plugin-eval report -r <run-id> --output junit-xml
 
 ## Configuration
 
-Configuration is managed via `config.yaml`. Key sections:
+Configuration is managed via `config.yaml`. Here's a quick reference:
+
+### Scope (What to Test)
 
 ```yaml
-# Which component types to evaluate
 scope:
-  skills: true
-  agents: true
-  commands: true
-  hooks: true # Integrated in PR #58
-  mcp_servers: true # Integrated in PR #63
+  skills: true # Evaluate skill components
+  agents: true # Evaluate agent components
+  commands: true # Evaluate command components
+  hooks: false # Evaluate hook components
+  mcp_servers: false # Evaluate MCP server components
+```
 
-# Scenario generation settings
+### Generation (Stage 2)
+
+```yaml
 generation:
   model: "claude-sonnet-4-5-20250929"
-  scenarios_per_component: 5
-  diversity: 0.7 # Ratio of base scenarios to variations
-  semantic_variations: true
+  scenarios_per_component: 5 # Test scenarios per component
+  diversity: 0.7 # 0.0-1.0, higher = more unique scenarios
+  semantic_variations: true # Generate synonym variations
+```
 
-# Execution settings
+### Execution (Stage 3)
+
+```yaml
 execution:
   model: "claude-sonnet-4-20250514"
-  max_turns: 5
-  timeout_ms: 60000
-  max_budget_usd: 10.0
-  disallowed_tools: [Write, Edit, Bash] # Safety: block file operations
-  # requests_per_second: 2  # Optional: rate limit API calls
+  max_turns: 5 # Conversation turns per scenario
+  timeout_ms: 60000 # Timeout per scenario (1 min)
+  max_budget_usd: 10.0 # Stop if cost exceeds this
+  disallowed_tools: # Safety: block file operations
+    - Write
+    - Edit
+    - Bash
+```
 
-# Evaluation settings
+### Evaluation (Stage 4)
+
+```yaml
 evaluation:
   model: "claude-sonnet-4-5-20250929"
   detection_mode: "programmatic_first" # Or "llm_only"
@@ -199,9 +214,10 @@ evaluation:
 
 See the full [`config.yaml`](./config.yaml) for all options, including:
 
-- **`tuning`**: Fine-tune timeouts, retry behavior, and token estimates for performance optimization
+- **`tuning`**: Fine-tune timeouts, retry behavior, and token estimates
 - **`conflict_detection`**: Detect when multiple components trigger for the same prompt
-- **`batch_threshold`**: Use Anthropic Batches API for cost savings on large runs (50% discount)
+- **`batch_threshold`**: Use Anthropic Batches API for cost savings (50% discount)
+- **`sanitization`**: PII redaction with ReDoS-safe custom patterns
 
 ## Output Structure
 
@@ -250,8 +266,9 @@ results/
 
 1. During execution, PreToolUse hooks capture all tool invocations
 2. Tool captures are parsed to detect `Skill`, `Task`, and `SlashCommand` calls
-3. Component names are matched against expected triggers
-4. Confidence is 100% for programmatic detection
+3. MCP tools detected via pattern: `mcp__<server>__<tool>`
+4. Hooks detected via `SDKHookResponseMessage` events
+5. Confidence is 100% for programmatic detection
 
 **LLM judge is secondary**, used for:
 
@@ -283,11 +300,33 @@ npm run lint
 npm run typecheck
 ```
 
-### Run a Single Test
+### Run Specific Tests
 
 ```bash
+# Single test file
 npx vitest run tests/unit/stages/1-analysis/skill-analyzer.test.ts
+
+# Tests matching pattern
 npx vitest run -t "SkillAnalyzer"
+
+# E2E tests (requires API key, costs money)
+RUN_E2E_TESTS=true npm test -- tests/e2e/
+```
+
+### Additional Linters
+
+```bash
+# Prettier (formatting)
+npx prettier --check "src/**/*.ts" "*.json" "*.md"
+
+# Markdown
+markdownlint "*.md"
+
+# YAML
+uvx yamllint -c .yamllint.yml config.yaml
+
+# GitHub Actions
+actionlint .github/workflows/*.yml
 ```
 
 ### Project Structure
@@ -295,20 +334,51 @@ npx vitest run -t "SkillAnalyzer"
 ```text
 src/
 ├── index.ts              # CLI entry point
+├── env.ts                # Environment setup (dotenv)
 ├── config/               # Configuration loading & validation
+│   ├── loader.ts         # YAML/JSON config loading with Zod
+│   ├── schema.ts         # Zod validation schemas
+│   ├── defaults.ts       # Default configuration values
+│   └── pricing.ts        # Model pricing for cost estimation
 ├── stages/
 │   ├── 1-analysis/       # Plugin parsing, trigger extraction
+│   │   ├── plugin-parser.ts
+│   │   ├── skill-analyzer.ts
+│   │   ├── agent-analyzer.ts
+│   │   ├── command-analyzer.ts
+│   │   ├── hook-analyzer.ts
+│   │   └── mcp-analyzer.ts
 │   ├── 2-generation/     # Scenario generation
+│   │   ├── skill-scenario-generator.ts
+│   │   ├── agent-scenario-generator.ts
+│   │   ├── command-scenario-generator.ts
+│   │   ├── hook-scenario-generator.ts
+│   │   ├── mcp-scenario-generator.ts
+│   │   ├── semantic-generator.ts
+│   │   └── cost-estimator.ts
 │   ├── 3-execution/      # Agent SDK integration
+│   │   ├── agent-executor.ts
+│   │   ├── plugin-loader.ts
+│   │   ├── sdk-client.ts
+│   │   └── hook-capture.ts
 │   └── 4-evaluation/     # Detection & metrics
+│       ├── programmatic-detector.ts
+│       ├── llm-judge.ts
+│       ├── metrics.ts
+│       └── conflict-tracker.ts
 ├── state/                # Resume capability
+│   └── state-manager.ts
 ├── types/                # TypeScript interfaces
 └── utils/                # Retry, concurrency, logging
+    ├── retry.ts
+    ├── concurrency.ts
+    ├── sanitizer.ts
+    └── logging.ts
 
 tests/
 ├── unit/                 # Unit tests (mirror src/ structure)
-│   └── stages/           # Per-stage test files
 ├── integration/          # Integration tests
+├── e2e/                  # End-to-end tests (real SDK calls)
 ├── mocks/                # Mock implementations
 └── fixtures/             # Test data and mock plugins
 ```
@@ -342,7 +412,9 @@ The default `disallowed_tools: [Write, Edit, Bash]` prevents file modifications 
 ### Sensitive Data
 
 - API keys are loaded from environment variables, never stored in config
-- PII sanitization is available but **disabled by default**; enable via `output.sanitize_logs` and `output.sanitize_transcripts` in config
+- PII sanitization is available but **disabled by default**
+- Enable via `output.sanitize_logs` and `output.sanitize_transcripts` in config
+- Custom sanitization patterns are validated for ReDoS safety
 - Transcripts may contain user-provided data; enable sanitization or review before sharing
 
 ### Plugin Loading

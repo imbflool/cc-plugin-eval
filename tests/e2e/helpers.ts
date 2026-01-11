@@ -60,7 +60,7 @@ export function createE2EScope(
     agents: false,
     commands: false,
     hooks: false,
-    mcp_servers: false,
+    mcp_servers: false, // MCP connections slow down tests significantly
     ...overrides,
   };
 }

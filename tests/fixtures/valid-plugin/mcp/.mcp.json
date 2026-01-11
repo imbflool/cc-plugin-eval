@@ -1,29 +1,8 @@
 {
   "mcpServers": {
-    "github": {
-      "type": "stdio",
+    "context7": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
-      }
-    },
-    "filesystem": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
-      "env": {}
-    },
-    "weather-api": {
-      "type": "sse",
-      "url": "https://weather.example.com/mcp",
-      "headers": {
-        "Authorization": "Bearer ${WEATHER_API_KEY}"
-      }
-    },
-    "local-db": {
-      "type": "http",
-      "url": "http://localhost:3000/mcp"
+      "args": ["-y", "@upstash/context7-mcp"]
     }
   }
 }

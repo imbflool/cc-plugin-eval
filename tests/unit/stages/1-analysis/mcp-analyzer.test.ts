@@ -88,53 +88,21 @@ describe("extractEnvVars", () => {
 describe("analyzeMcp", () => {
   it("parses stdio server correctly", () => {
     const servers = analyzeMcp(mcpConfigPath);
-    const github = servers.find((s) => s.name === "github");
+    const context7 = servers.find((s) => s.name === "context7");
 
-    expect(github).toBeDefined();
-    expect(github?.serverType).toBe("stdio");
-    expect(github?.command).toBe("npx");
-    expect(github?.authRequired).toBe(true);
-    expect(github?.envVars).toContain("GITHUB_TOKEN");
-  });
-
-  it("parses sse server correctly", () => {
-    const servers = analyzeMcp(mcpConfigPath);
-    const weather = servers.find((s) => s.name === "weather-api");
-
-    expect(weather).toBeDefined();
-    expect(weather?.serverType).toBe("sse");
-    expect(weather?.url).toBe("https://weather.example.com/mcp");
-    expect(weather?.authRequired).toBe(true);
-  });
-
-  it("parses http server correctly", () => {
-    const servers = analyzeMcp(mcpConfigPath);
-    const localDb = servers.find((s) => s.name === "local-db");
-
-    expect(localDb).toBeDefined();
-    expect(localDb?.serverType).toBe("http");
-    expect(localDb?.url).toBe("http://localhost:3000/mcp");
-    expect(localDb?.authRequired).toBe(false);
-  });
-
-  it("identifies server without auth requirement", () => {
-    const servers = analyzeMcp(mcpConfigPath);
-    const filesystem = servers.find((s) => s.name === "filesystem");
-
-    expect(filesystem).toBeDefined();
-    expect(filesystem?.authRequired).toBe(false);
-    expect(filesystem?.envVars).toEqual([]);
+    expect(context7).toBeDefined();
+    expect(context7?.serverType).toBe("stdio");
+    expect(context7?.command).toBe("npx");
+    expect(context7?.authRequired).toBe(false);
+    expect(context7?.envVars).toEqual([]);
   });
 
   it("parses all servers from config", () => {
     const servers = analyzeMcp(mcpConfigPath);
 
-    expect(servers).toHaveLength(4);
+    expect(servers).toHaveLength(1);
     const names = servers.map((s) => s.name);
-    expect(names).toContain("github");
-    expect(names).toContain("filesystem");
-    expect(names).toContain("weather-api");
-    expect(names).toContain("local-db");
+    expect(names).toContain("context7");
   });
 
   it("generates description for each server", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  analyzePatternSafety,
   createSanitizer,
   DEFAULT_REDACTION_PATTERNS,
   sanitizeContent,
@@ -378,10 +379,129 @@ describe("sanitizeTranscriptEvent", () => {
   });
 });
 
-describe("validateRegexPattern", () => {
-  // Import will be added once function is implemented
-  // This is expected to fail initially (TDD)
+describe("analyzePatternSafety", () => {
+  describe("safe patterns", () => {
+    it("marks simple patterns as safe", () => {
+      const result = analyzePatternSafety("\\d{3}-\\d{4}");
+      expect(result.isSafe).toBe(true);
+      expect(result.score).toBe(0);
+      expect(result.warnings).toHaveLength(0);
+    });
 
+    it("marks email pattern as safe", () => {
+      const result = analyzePatternSafety(
+        "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}",
+      );
+      expect(result.isSafe).toBe(true);
+    });
+
+    it("marks IP address pattern as safe", () => {
+      // This pattern is complex but safe - no nested quantifiers
+      const result = analyzePatternSafety("(\\d{1,3}\\.){3}\\d{1,3}");
+      // This should be safe because while it has quantifiers in groups,
+      // they're bounded ({1,3} and {3})
+      expect(result.isSafe).toBe(true);
+    });
+
+    it("marks API key pattern as safe", () => {
+      const result = analyzePatternSafety("sk-ant-[a-zA-Z0-9_-]+");
+      expect(result.isSafe).toBe(true);
+    });
+
+    it("marks SSN pattern as safe", () => {
+      const result = analyzePatternSafety("\\d{3}-\\d{2}-\\d{4}");
+      expect(result.isSafe).toBe(true);
+      expect(result.score).toBe(0);
+    });
+  });
+
+  describe("unsafe patterns - nested quantifiers", () => {
+    it("detects (a+)+ as unsafe", () => {
+      const result = analyzePatternSafety("(a+)+");
+      expect(result.isSafe).toBe(false);
+      expect(result.score).toBeGreaterThanOrEqual(10);
+      expect(
+        result.warnings.some((w) => w.includes("Nested quantifiers")),
+      ).toBe(true);
+    });
+
+    it("detects (a*)* as unsafe", () => {
+      const result = analyzePatternSafety("(a*)*");
+      expect(result.isSafe).toBe(false);
+      expect(
+        result.warnings.some((w) => w.includes("Nested quantifiers")),
+      ).toBe(true);
+    });
+
+    it("detects (\\w+)+ as unsafe", () => {
+      const result = analyzePatternSafety("(\\w+)+");
+      expect(result.isSafe).toBe(false);
+    });
+
+    it("detects (x+x+)+y as unsafe", () => {
+      const result = analyzePatternSafety("(x+x+)+y");
+      expect(result.isSafe).toBe(false);
+    });
+  });
+
+  describe("unsafe patterns - overlapping alternations", () => {
+    it("detects (a|ab)* as potentially unsafe", () => {
+      const result = analyzePatternSafety("(a|ab)*");
+      expect(result.isSafe).toBe(false);
+      expect(
+        result.warnings.some((w) => w.includes("Overlapping alternations")),
+      ).toBe(true);
+    });
+
+    it("detects (foo|foobar)+ as potentially unsafe", () => {
+      const result = analyzePatternSafety("(foo|foobar)+");
+      expect(result.isSafe).toBe(false);
+    });
+  });
+
+  describe("warning - deep nesting", () => {
+    it("warns about deep nesting (> 3 levels)", () => {
+      const result = analyzePatternSafety("((((a))))");
+      expect(result.warnings.some((w) => w.includes("Deep nesting"))).toBe(
+        true,
+      );
+      // Deep nesting alone shouldn't make it unsafe (low score)
+      expect(result.score).toBeLessThan(10);
+    });
+
+    it("does not warn about 3 levels of nesting", () => {
+      const result = analyzePatternSafety("(((a)))");
+      expect(result.warnings.some((w) => w.includes("Deep nesting"))).toBe(
+        false,
+      );
+    });
+  });
+
+  describe("combined risk factors", () => {
+    it("accumulates score for multiple risk factors", () => {
+      // Nested quantifiers + overlapping alternation
+      const result = analyzePatternSafety("((a|ab)+)+");
+      expect(result.isSafe).toBe(false);
+      expect(result.score).toBeGreaterThanOrEqual(10);
+      expect(result.warnings.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("edge cases", () => {
+    it("handles empty pattern", () => {
+      const result = analyzePatternSafety("");
+      expect(result.isSafe).toBe(true);
+      expect(result.score).toBe(0);
+    });
+
+    it("handles pattern with escaped special characters", () => {
+      const result = analyzePatternSafety("\\(\\+\\)\\*");
+      expect(result.isSafe).toBe(true);
+    });
+  });
+});
+
+describe("validateRegexPattern", () => {
   it("returns compiled RegExp for valid pattern", async () => {
     const { validateRegexPattern } =
       await import("../../../src/utils/sanitizer.js");
@@ -443,5 +563,67 @@ describe("validateRegexPattern", () => {
     const result = validateRegexPattern("\\$\\d+\\.\\d{2}", "currency");
     expect(result).toBeInstanceOf(RegExp);
     expect(result.test("$19.99")).toBe(true);
+  });
+
+  describe("ReDoS safety validation", () => {
+    it("throws ConfigLoadError for unsafe patterns", async () => {
+      const { validateRegexPattern } =
+        await import("../../../src/utils/sanitizer.js");
+      expect(() => validateRegexPattern("(a+)+", "dangerous_pattern")).toThrow(
+        /ReDoS/,
+      );
+    });
+
+    it("includes risk score in error message", async () => {
+      const { validateRegexPattern } =
+        await import("../../../src/utils/sanitizer.js");
+      try {
+        validateRegexPattern("(a+)+", "test");
+        expect.fail("Should have thrown");
+      } catch (error) {
+        expect((error as Error).message).toMatch(/risk score/i);
+      }
+    });
+
+    it("includes bypass instructions in error message", async () => {
+      const { validateRegexPattern } =
+        await import("../../../src/utils/sanitizer.js");
+      try {
+        validateRegexPattern("(a+)+", "test");
+        expect.fail("Should have thrown");
+      } catch (error) {
+        expect((error as Error).message).toMatch(/pattern_safety_acknowledged/);
+      }
+    });
+
+    it("includes OWASP link in error message", async () => {
+      const { validateRegexPattern } =
+        await import("../../../src/utils/sanitizer.js");
+      try {
+        validateRegexPattern("(a+)+", "test");
+        expect.fail("Should have thrown");
+      } catch (error) {
+        expect((error as Error).message).toMatch(/owasp\.org/);
+      }
+    });
+
+    it("allows unsafe patterns when skipSafetyCheck is true", async () => {
+      const { validateRegexPattern } =
+        await import("../../../src/utils/sanitizer.js");
+      const result = validateRegexPattern("(a+)+", "dangerous_pattern", {
+        skipSafetyCheck: true,
+      });
+      expect(result).toBeInstanceOf(RegExp);
+    });
+
+    it("still validates syntax even when skipSafetyCheck is true", async () => {
+      const { validateRegexPattern } =
+        await import("../../../src/utils/sanitizer.js");
+      expect(() =>
+        validateRegexPattern("[invalid(", "broken_pattern", {
+          skipSafetyCheck: true,
+        }),
+      ).toThrow(/Invalid regex pattern/);
+    });
   });
 });

@@ -8,6 +8,7 @@
 import { DEFAULT_TUNING } from "../../config/defaults.js";
 import {
   createSanitizer,
+  validateRegexPattern,
   type SanitizerFunction,
 } from "../../utils/sanitizer.js";
 
@@ -329,11 +330,19 @@ function createSanitizerFromConfig(
   }
 
   const sanitizationConfig = outputConfig.sanitization;
-  const customPatterns = sanitizationConfig?.custom_patterns?.map((p) => ({
-    name: "custom",
-    pattern: new RegExp(p.pattern, "g"),
-    replacement: p.replacement,
-  }));
+  const skipSafetyCheck =
+    sanitizationConfig?.pattern_safety_acknowledged ?? false;
+  const customPatterns = sanitizationConfig?.custom_patterns?.map(
+    (p, index) => ({
+      name: `custom_${String(index)}`,
+      pattern: validateRegexPattern(
+        p.pattern,
+        `custom_patterns[${String(index)}]`,
+        { skipSafetyCheck },
+      ),
+      replacement: p.replacement,
+    }),
+  );
 
   // Only pass patterns if they exist to satisfy exactOptionalPropertyTypes
   if (customPatterns && customPatterns.length > 0) {

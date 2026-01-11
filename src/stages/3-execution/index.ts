@@ -306,12 +306,15 @@ function saveTranscripts(
   let sanitizer: ReturnType<typeof createSanitizer> | undefined;
 
   if (shouldSanitize) {
+    const skipSafetyCheck =
+      config.output.sanitization?.pattern_safety_acknowledged ?? false;
     const customPatterns = config.output.sanitization?.custom_patterns?.map(
       (p, index) => ({
         name: `custom_${String(index)}`,
         pattern: validateRegexPattern(
           p.pattern,
           `custom_patterns[${String(index)}]`,
+          { skipSafetyCheck },
         ),
         replacement: p.replacement,
       }),

@@ -35,6 +35,7 @@ export const TokenEstimatesConfigSchema = z.object({
   per_agent: z.number().int().min(100).max(3000).default(800),
   per_command: z.number().int().min(50).max(1000).default(300),
   per_hook: z.number().int().min(50).max(1000).default(400),
+  per_mcp_server: z.number().int().min(50).max(1000).default(400),
   semantic_gen_max_tokens: z.number().int().min(500).max(4000).default(1000),
 });
 
@@ -175,6 +176,12 @@ export const CustomRedactionPatternSchema = z.object({
 export const SanitizationConfigSchema = z.object({
   enabled: z.boolean().default(false),
   custom_patterns: z.array(CustomRedactionPatternSchema).optional(),
+  /**
+   * Acknowledge that custom patterns have been reviewed for ReDoS safety.
+   * Required when custom patterns trigger safety warnings.
+   * Set to true to bypass ReDoS validation for patterns you trust.
+   */
+  pattern_safety_acknowledged: z.boolean().default(false),
 });
 
 /**

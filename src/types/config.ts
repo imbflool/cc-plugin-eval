@@ -125,6 +125,12 @@ export interface SanitizationConfig {
   enabled: boolean;
   /** Custom redaction patterns to apply */
   custom_patterns?: CustomRedactionPattern[];
+  /**
+   * Acknowledge that custom patterns have been reviewed for ReDoS safety.
+   * Required when custom patterns trigger safety warnings.
+   * Set to true to bypass ReDoS validation for patterns you trust.
+   */
+  pattern_safety_acknowledged?: boolean;
 }
 
 /**

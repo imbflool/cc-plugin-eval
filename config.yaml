@@ -331,6 +331,23 @@ evaluation:
 #       - pattern: Regex string (will be compiled with 'g' flag)
 #       - replacement: Replacement string for matches
 #     Default patterns include: API keys, JWTs, emails, phone numbers, SSNs, credit cards
+#
+#     pattern_safety_acknowledged - Bypass ReDoS safety validation (default: false)
+#       ⚠️  SECURITY WARNING: Custom regex patterns may cause ReDoS attacks.
+#       When set to true, patterns that trigger safety warnings will be allowed.
+#       Only use this if you have manually verified your patterns are safe.
+#
+#       Before adding patterns, test them for catastrophic backtracking:
+#         1. Test on https://regex101.com with large inputs
+#         2. Avoid nested quantifiers: (a+)+, (a*)*, (a|a)*
+#         3. Limit nesting depth to 3 or fewer levels
+#
+#       Vulnerable example: "(a+)+b"  ← Hangs on "aaaaaaaaaaaX"
+#       Safe alternative: "a+b"       ← Matches same strings efficiently
+#
+#       Resources:
+#         - https://owasp.org/www-community/attacks/Regular_expression_Denial_of_Service_-_ReDoS
+#         - https://github.com/OWASP/CheatSheetSeries/blob/master/cheatsheets/Regular_Expression_Security_Cheat_Sheet.md
 output:
   format: "json"
   include_cli_summary: true
@@ -338,6 +355,7 @@ output:
   sanitize_transcripts: false
   sanitize_logs: false
   # sanitization:
+  #   pattern_safety_acknowledged: false  # Set to true to bypass ReDoS check
   #   custom_patterns:
   #     - pattern: "SECRET-\\w+"
   #       replacement: "[REDACTED_SECRET]"

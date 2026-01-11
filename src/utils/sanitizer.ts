@@ -39,6 +39,26 @@ export interface CustomPatternConfig {
 }
 
 /**
+ * Result of analyzing a regex pattern for ReDoS vulnerability.
+ */
+export interface PatternSafetyAnalysis {
+  /** Risk score (0 = safe, higher = riskier). Score >= 10 is considered unsafe. */
+  score: number;
+  /** Human-readable warnings explaining risk factors */
+  warnings: string[];
+  /** Whether the pattern is considered safe (score < 10) */
+  isSafe: boolean;
+}
+
+/**
+ * Options for regex pattern validation.
+ */
+export interface ValidateRegexPatternOptions {
+  /** Skip ReDoS safety analysis (default: false) */
+  skipSafetyCheck?: boolean;
+}
+
+/**
  * Sanitization configuration from config.yaml.
  */
 export interface SanitizationConfig {
@@ -128,20 +148,120 @@ export const DEFAULT_REDACTION_PATTERNS: RedactionPattern[] = [
   },
 ];
 
+/** Threshold for considering a pattern unsafe. */
+const REDOS_SAFETY_THRESHOLD = 10;
+
+/**
+ * Analyze a regex pattern for potential ReDoS vulnerability.
+ *
+ * Uses heuristic analysis to detect patterns that may cause catastrophic
+ * backtracking. Scoring is based on known ReDoS risk factors:
+ *
+ * - Nested quantifiers: `(a+)+`, `(a*)*` - 10 points each (most dangerous)
+ * - Overlapping alternations: `(a|ab)*` - 10 points each (can cause exponential backtracking)
+ * - Deep nesting: > 3 levels of parentheses - 1 point per extra level
+ * - Unbounded repetition in groups: `(a*)+` - 5 points each
+ *
+ * Patterns with a score >= 10 are considered potentially unsafe.
+ *
+ * @param pattern - The regex pattern string to analyze
+ * @returns Analysis result with score, warnings, and safety determination
+ *
+ * @example
+ * ```typescript
+ * // Safe pattern
+ * analyzePatternSafety("\\d{3}-\\d{4}");
+ * // { score: 0, warnings: [], isSafe: true }
+ *
+ * // Unsafe pattern (nested quantifiers)
+ * analyzePatternSafety("(a+)+b");
+ * // { score: 10, warnings: ["Nested quantifiers..."], isSafe: false }
+ * ```
+ */
+export function analyzePatternSafety(pattern: string): PatternSafetyAnalysis {
+  let score = 0;
+  const warnings: string[] = [];
+
+  // Check 1: Nested quantifiers (most dangerous)
+  // Pattern: quantified group followed by quantifier, e.g., (a+)+, (a*)*
+  // This detects patterns like: (a+)+, (a*)+, (\w+)*, (foo+)+
+  const nestedQuantifierPattern =
+    /\([^()]*[+*][^()]*\)[+*]|\([^()]*[+*][^()]*\)\{/g;
+  const nestedMatches = pattern.match(nestedQuantifierPattern);
+  if (nestedMatches) {
+    score += nestedMatches.length * 10;
+    warnings.push(
+      `Nested quantifiers detected (${String(nestedMatches.length)}x): ${nestedMatches.join(", ")}. ` +
+        `These can cause exponential backtracking.`,
+    );
+  }
+
+  // Check 2: Overlapping alternations with quantifiers, e.g., (a|ab)*
+  // These patterns can cause catastrophic backtracking when alternatives share prefixes/suffixes
+  const overlappingAltPattern = /\([^)]*\|[^)]*\)[+*]/g;
+  const overlappingMatches = pattern.match(overlappingAltPattern);
+  if (overlappingMatches) {
+    score += overlappingMatches.length * 10;
+    warnings.push(
+      `Overlapping alternations (${String(overlappingMatches.length)}x): ${overlappingMatches.join(", ")}. ` +
+        `These can cause exponential backtracking when alternatives share prefixes.`,
+    );
+  }
+
+  // Check 3: Deep nesting (> 3 levels of parentheses)
+  let depth = 0;
+  let maxDepth = 0;
+  for (const char of pattern) {
+    if (char === "(") {
+      depth++;
+    }
+    if (char === ")") {
+      depth--;
+    }
+    maxDepth = Math.max(maxDepth, depth);
+  }
+  if (maxDepth > 3) {
+    const extraLevels = maxDepth - 3;
+    score += extraLevels;
+    warnings.push(
+      `Deep nesting: ${String(maxDepth)} levels (threshold: 3). ` +
+        `Consider simplifying the pattern.`,
+    );
+  }
+
+  // Check 4: Unbounded repetition inside groups with outer quantifier
+  // More specific check for patterns like (\w*)+ or ([a-z]+)*
+  const unboundedInGroupPattern =
+    /\([^()]*(?:\*|\+|\{[0-9]*,\})[^()]*\)(?:\*|\+|\{[0-9]*,\})/g;
+  const unboundedMatches = pattern.match(unboundedInGroupPattern);
+  if (unboundedMatches && !nestedMatches) {
+    // Only add if not already caught by nested quantifiers
+    score += unboundedMatches.length * 5;
+    warnings.push(
+      `Unbounded repetition in groups (${String(unboundedMatches.length)}x): ${unboundedMatches.join(", ")}. ` +
+        `Consider using possessive quantifiers or limiting repetitions.`,
+    );
+  }
+
+  return {
+    score,
+    warnings,
+    isSafe: score < REDOS_SAFETY_THRESHOLD,
+  };
+}
+
 /**
  * Validate and compile a regex pattern string.
  *
  * Validates that the pattern is syntactically correct and compiles it
- * with the global flag. Throws a descriptive error if the pattern is invalid.
- *
- * Note: Does not currently detect ReDoS-vulnerable patterns (catastrophic
- * backtracking). Consider adding safe-regex library if patterns become
- * user-controlled or if ReDoS becomes a concern.
+ * with the global flag. Optionally checks for ReDoS vulnerability using
+ * heuristic analysis.
  *
  * @param pattern - The regex pattern string to validate and compile
  * @param name - Human-readable name for the pattern (used in error messages)
+ * @param options - Validation options (e.g., skipSafetyCheck)
  * @returns Compiled RegExp with 'g' flag
- * @throws ConfigLoadError if the pattern has invalid regex syntax
+ * @throws ConfigLoadError if the pattern has invalid regex syntax or is unsafe
  *
  * @example
  * ```typescript
@@ -151,17 +271,47 @@ export const DEFAULT_REDACTION_PATTERNS: RedactionPattern[] = [
  *
  * // Invalid pattern throws
  * validateRegexPattern("[invalid(", "broken"); // throws ConfigLoadError
+ *
+ * // Unsafe pattern throws (unless bypassed)
+ * validateRegexPattern("(a+)+", "dangerous"); // throws ConfigLoadError
+ * validateRegexPattern("(a+)+", "dangerous", { skipSafetyCheck: true }); // OK
  * ```
  */
-export function validateRegexPattern(pattern: string, name: string): RegExp {
+export function validateRegexPattern(
+  pattern: string,
+  name: string,
+  options?: ValidateRegexPatternOptions,
+): RegExp {
+  // First validate syntax
+  let regex: RegExp;
   try {
-    return new RegExp(pattern, "g");
+    regex = new RegExp(pattern, "g");
   } catch (error) {
     throw new ConfigLoadError(
       `Invalid regex pattern "${name}": ${error instanceof Error ? error.message : String(error)}`,
       error instanceof Error ? error : undefined,
     );
   }
+
+  // Then check for ReDoS if not skipped
+  if (!options?.skipSafetyCheck) {
+    const safety = analyzePatternSafety(pattern);
+
+    if (!safety.isSafe) {
+      const warningList = safety.warnings.map((w) => `  - ${w}`).join("\n");
+      throw new ConfigLoadError(
+        `Pattern "${name}" may be vulnerable to ReDoS (risk score: ${String(safety.score)}/${String(REDOS_SAFETY_THRESHOLD)}):\n` +
+          `${warningList}\n\n` +
+          `To bypass this check, add the following to your config.yaml:\n\n` +
+          `  output:\n` +
+          `    sanitization:\n` +
+          `      pattern_safety_acknowledged: true\n\n` +
+          `Learn more: https://owasp.org/www-community/attacks/Regular_expression_Denial_of_Service_-_ReDoS`,
+      );
+    }
+  }
+
+  return regex;
 }
 
 /**

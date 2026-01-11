@@ -1,6 +1,6 @@
 {
   "name": "cc-plugin-eval",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Claude Code plugin component triggering evaluation framework",
   "type": "module",
   "main": "dist/index.js",

@@ -129,6 +129,14 @@ api\.github\.com/.*
 registry\.npmjs\.org/.*
 
 # =============================================================================
+# Release Process URLs
+# =============================================================================
+
+# GitHub version comparison links reference tags that don't exist during release
+# PR process. These links become valid after the release tag is created.
+github\.com/sjnims/cc-plugin-eval/compare/v\d+\.\d+\.\d+
+
+# =============================================================================
 # Generated/Dynamic Content
 # =============================================================================
 

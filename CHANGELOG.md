@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-01-10
+
+### Added
+
+- MCP server evaluation with tool detection via `mcp__<server>__<tool>` pattern (#63)
+- Hooks evaluation with SDKHookResponseMessage event detection (#58, #49)
+- E2E integration tests with real Claude Agent SDK (#68)
+- ReDoS protection for custom sanitization patterns (#66)
+
+### Changed
+
+- Modernized CI workflows with updated action versions (#64, #65)
+- Updated dependencies: zod 4.3.5, glob 13.0.0 (#54, #55)
+- Improved README and CLAUDE.md documentation (#69)
+
+### Fixed
+
+- CI not failing on codecov errors for Dependabot PRs
+
 ## [0.1.0] - 2026-01-02
 
 ### Added
@@ -36,5 +55,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Variance propagation from runJudgment to metrics (#30)
 - Centralized logger and pricing utilities (#43)
 
-[Unreleased]: https://github.com/sjnims/cc-plugin-eval/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sjnims/cc-plugin-eval/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sjnims/cc-plugin-eval/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sjnims/cc-plugin-eval/releases/tag/v0.1.0

@@ -35,6 +35,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 20
+          persist-credentials: false
 
       - name: Label issue with Claude
         uses: anthropics/claude-code-action@b6e5a9f27ac3c7d2c2b1542b8670917750e0433f # v1.0.29+
@@ -151,6 +152,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 20
+          persist-credentials: false
 
       - name: Label PR with Claude
         uses: anthropics/claude-code-action@b6e5a9f27ac3c7d2c2b1542b8670917750e0433f # v1.0.29+

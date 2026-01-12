@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING**: Default execution strategy changed from isolated to batched mode
+  for ~80% faster startup. Scenarios testing the same component now share a session
+  with `/clear` between them. To restore previous behavior, set
+  `execution.session_strategy: "isolated"` or `execution.session_isolation: true`
+  in your config. (#86)
+
 ## [0.2.0] - 2026-01-10
 
 ### Added

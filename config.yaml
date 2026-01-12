@@ -175,12 +175,12 @@ generation:
 #
 #   session_strategy - Session management strategy (replaces session_isolation)
 #     Possible values:
-#       - "isolated" - Each scenario runs in fresh session (default, safest)
 #       - "batched_by_component" - Scenarios testing the same component share
-#         a session with /clear between them (~80% faster startup)
-#     Trade-off: Batched mode reduces overhead but carries cross-contamination
+#         a session with /clear between them (~80% faster startup) (default)
+#       - "isolated" - Each scenario runs in fresh session (slower, safest)
+#     Trade-off: Batched mode reduces overhead but carries minimal cross-contamination
 #     risk between scenarios testing the same component.
-#     Default: "isolated"
+#     Default: "batched_by_component"
 #
 #   session_isolation - [DEPRECATED] Use session_strategy instead
 #     Possible values:
@@ -237,7 +237,7 @@ execution:
   max_turns: 5
   timeout_ms: 60000
   max_budget_usd: 10.0
-  session_strategy: "isolated"
+  session_strategy: "batched_by_component"
   permission_bypass: true
   allowed_tools: null
   disallowed_tools:

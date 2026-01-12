@@ -35,7 +35,7 @@ export const DEFAULT_EXECUTION = {
   max_turns: 5,
   timeout_ms: 60000,
   max_budget_usd: 10.0,
-  session_isolation: true,
+  session_isolation: false,
   permission_bypass: true,
   num_reps: 1,
   additional_plugins: [] as string[],

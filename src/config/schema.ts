@@ -134,7 +134,7 @@ export const ExecutionConfigSchema = z.object({
   max_turns: z.number().int().min(1).max(20).default(5),
   timeout_ms: z.number().int().min(5000).max(300000).default(60000),
   max_budget_usd: z.number().min(0.1).max(1000).default(10.0),
-  session_isolation: z.boolean().default(true),
+  session_isolation: z.boolean().default(false),
   /** Session strategy - when set, takes precedence over session_isolation */
   session_strategy: SessionStrategySchema.optional(),
   permission_bypass: z.boolean().default(true),

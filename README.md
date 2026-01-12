@@ -219,6 +219,41 @@ See the full [`config.yaml`](./config.yaml) for all options, including:
 - **`batch_threshold`**: Use Anthropic Batches API for cost savings (50% discount)
 - **`sanitization`**: PII redaction with ReDoS-safe custom patterns
 
+## Performance Optimization
+
+### Session Batching (Default)
+
+By default, scenarios testing the same component share a session with `/clear` between them. This reduces subprocess overhead by ~80%:
+
+| Mode              | Overhead per Scenario | 100 Scenarios |
+| ----------------- | --------------------- | ------------- |
+| Batched (default) | ~1-2s after first     | ~2-3 minutes  |
+| Isolated          | ~5-8s each            | ~8-13 minutes |
+
+The `/clear` command resets conversation history between scenarios while reusing the subprocess and loaded plugin.
+
+### When to Use Isolated Mode
+
+Switch to isolated mode when you need complete separation between scenarios:
+
+- Testing plugins that modify filesystem state
+- Debugging cross-contamination issues between scenarios
+- When using `rewind_file_changes: true` (automatically uses isolated mode)
+
+To use isolated mode:
+
+```yaml
+execution:
+  session_strategy: "isolated"
+```
+
+Or via the deprecated (but still supported) option:
+
+```yaml
+execution:
+  session_isolation: true
+```
+
 ## Output Structure
 
 After a run, results are saved to:

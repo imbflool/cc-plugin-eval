@@ -132,9 +132,12 @@ export async function verifyPluginLoad(
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
         abortSignal: controller.signal,
-        stderr: (data: string) => {
+        stderr: (data: string): void => {
           const elapsed = Date.now() - startTime;
-          console.error(`[Plugin Load ${elapsed}ms] SDK stderr:`, data.trim());
+          console.error(
+            `[Plugin Load ${String(elapsed)}ms] SDK stderr:`,
+            data.trim(),
+          );
         },
       },
     };

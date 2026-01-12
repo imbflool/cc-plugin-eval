@@ -160,22 +160,23 @@ function getNegativePrompt(serverName: string): string {
  */
 export function generateMcpScenarios(mcp: McpComponent): TestScenario[] {
   const scenarios: TestScenario[] = [];
-  const baseId = mcp.name.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
+  const serverName = mcp.name || "unnamed-server";
+  const baseId = serverName.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
 
   // Direct invocation scenario
   scenarios.push({
     id: `${baseId}-direct`,
-    component_ref: mcp.name,
+    component_ref: serverName,
     component_type: "mcp_server",
     scenario_type: "direct",
-    user_prompt: getMcpToolPrompt(mcp.name),
+    user_prompt: getMcpToolPrompt(serverName),
     expected_trigger: true,
-    expected_component: mcp.name,
-    reasoning: `Direct scenario for ${mcp.serverType} MCP server "${mcp.name}" - should invoke server tools`,
+    expected_component: serverName,
+    reasoning: `Direct scenario for ${mcp.serverType} MCP server "${serverName}" - should invoke server tools`,
   });
 
   // Add variation scenario based on server type
-  const lowerName = mcp.name.toLowerCase();
+  const lowerName = serverName.toLowerCase();
   const typePrompts = Object.entries(SERVER_TYPE_PROMPTS).find(([type]) =>
     lowerName.includes(type),
   );
@@ -184,39 +185,39 @@ export function generateMcpScenarios(mcp: McpComponent): TestScenario[] {
   if (variationPrompt) {
     scenarios.push({
       id: `${baseId}-variation`,
-      component_ref: mcp.name,
+      component_ref: serverName,
       component_type: "mcp_server",
       scenario_type: "paraphrased",
       user_prompt: variationPrompt,
       expected_trigger: true,
-      expected_component: mcp.name,
-      reasoning: `Variation scenario for ${mcp.name} - different operation same server`,
+      expected_component: serverName,
+      reasoning: `Variation scenario for ${serverName} - different operation same server`,
     });
   }
 
   // Negative scenario - prompt that should NOT trigger this server
   scenarios.push({
     id: `${baseId}-negative`,
-    component_ref: mcp.name,
+    component_ref: serverName,
     component_type: "mcp_server",
     scenario_type: "negative",
-    user_prompt: getNegativePrompt(mcp.name),
+    user_prompt: getNegativePrompt(serverName),
     expected_trigger: false,
-    expected_component: mcp.name,
-    reasoning: `Negative scenario - task should NOT require "${mcp.name}" MCP server`,
+    expected_component: serverName,
+    reasoning: `Negative scenario - task should NOT require "${serverName}" MCP server`,
   });
 
   // Auth-required scenario for servers needing authentication
   if (mcp.authRequired) {
     scenarios.push({
       id: `${baseId}-auth-required`,
-      component_ref: mcp.name,
+      component_ref: serverName,
       component_type: "mcp_server",
       scenario_type: "edge_case",
-      user_prompt: getMcpToolPrompt(mcp.name),
+      user_prompt: getMcpToolPrompt(serverName),
       expected_trigger: true,
-      expected_component: mcp.name,
-      reasoning: `Auth-required scenario - server "${mcp.name}" requires authentication (${mcp.envVars.join(", ")})`,
+      expected_component: serverName,
+      reasoning: `Auth-required scenario - server "${serverName}" requires authentication (${mcp.envVars.join(", ")})`,
     });
   }
 

@@ -126,10 +126,10 @@ function buildQueryInput(
       hooks: {
         PreToolUse: hooks,
       },
-      stderr: (data: string) => {
+      stderr: (data: string): void => {
         const elapsed = Date.now() - startTime;
         console.error(
-          `[Scenario ${scenario.id} ${elapsed}ms] SDK stderr:`,
+          `[Scenario ${scenario.id} ${String(elapsed)}ms] SDK stderr:`,
           data.trim(),
         );
       },

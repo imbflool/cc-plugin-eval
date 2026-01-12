@@ -100,9 +100,10 @@ describe("analyzeMcp", () => {
   it("parses all servers from config", () => {
     const servers = analyzeMcp(mcpConfigPath);
 
-    expect(servers).toHaveLength(1);
+    expect(servers).toHaveLength(2);
     const names = servers.map((s) => s.name);
     expect(names).toContain("context7");
+    expect(names).toContain("filesystem");
   });
 
   it("generates description for each server", () => {

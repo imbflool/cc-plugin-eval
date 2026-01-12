@@ -56,10 +56,13 @@ export function resolveModelId(shortName: string): string {
 /**
  * Create Anthropic client.
  *
- * @returns Anthropic client instance
+ * Disables SDK built-in retries to avoid compounding with our custom retry logic.
+ * All retries are handled by withRetry() in src/utils/retry.ts.
+ *
+ * @returns Anthropic client instance with retries disabled
  */
 export function createAnthropicClient(): Anthropic {
-  return new Anthropic();
+  return new Anthropic({ maxRetries: 0 });
 }
 
 /**

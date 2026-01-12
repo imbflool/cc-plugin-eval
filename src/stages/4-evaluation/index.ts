@@ -329,7 +329,8 @@ export async function runEvaluation(
   }
 
   // Create Anthropic client for LLM judge
-  const client = new Anthropic();
+  // Disable SDK retries - all retries handled by withRetry() in src/utils/retry.ts
+  const client = new Anthropic({ maxRetries: 0 });
 
   // Build scenario map for quick lookup
   const scenarioMap = new Map<string, TestScenario>();

@@ -4,6 +4,7 @@ import {
   calculateDelay,
   createRetryOptionsFromTuning,
   createRetryWrapper,
+  extractRetryAfter,
   isTransientError,
   withRetry,
 } from "../../../src/utils/retry.js";
@@ -203,5 +204,74 @@ describe("createRetryOptionsFromTuning", () => {
     // Verify it works
     const error = new Error("Rate limit");
     expect(options.isRetryable?.(error)).toBe(true);
+  });
+});
+
+describe("extractRetryAfter", () => {
+  it("extracts retry-after from error headers (seconds)", () => {
+    const error = {
+      headers: { "retry-after": "5" },
+      message: "Rate limit",
+    };
+    expect(extractRetryAfter(error)).toBe(5000); // 5 seconds in ms
+  });
+
+  it("extracts retry-after from Anthropic SDK error structure", () => {
+    // Anthropic SDK errors have headers as a Headers-like object
+    const error = {
+      status: 429,
+      headers: {
+        get: (name: string) => (name === "retry-after" ? "10" : null),
+      },
+      message: "Rate limit exceeded",
+    };
+    expect(extractRetryAfter(error)).toBe(10000);
+  });
+
+  it("returns null for missing retry-after header", () => {
+    const error = {
+      headers: {},
+      message: "Error",
+    };
+    expect(extractRetryAfter(error)).toBeNull();
+  });
+
+  it("returns null for non-numeric retry-after", () => {
+    const error = {
+      headers: { "retry-after": "invalid" },
+      message: "Error",
+    };
+    expect(extractRetryAfter(error)).toBeNull();
+  });
+
+  it("returns null when error has no headers", () => {
+    const error = new Error("No headers");
+    expect(extractRetryAfter(error)).toBeNull();
+  });
+});
+
+describe("withRetry retry-after integration", () => {
+  it("respects retry-after header from rate limit errors", async () => {
+    const onRetry = vi.fn();
+    const errorWithRetryAfter = Object.assign(new Error("Rate limit"), {
+      status: 429,
+      headers: { "retry-after": "10" }, // 10 seconds
+    });
+
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(errorWithRetryAfter)
+      .mockResolvedValueOnce("success");
+
+    await withRetry(fn, {
+      onRetry,
+      initialDelayMs: 100, // Much less than retry-after
+      maxRetries: 3,
+    });
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    // Delay should be at least 10000ms (from retry-after)
+    const [, , delay] = onRetry.mock.calls[0] as [unknown, unknown, number];
+    expect(delay).toBeGreaterThanOrEqual(10000);
   });
 });

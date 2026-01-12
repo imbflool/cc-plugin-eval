@@ -119,6 +119,59 @@ export function isTransientError(error: unknown): boolean {
 }
 
 /**
+ * Headers object type - supports both plain objects and Headers-like objects.
+ */
+type HeadersObject =
+  | Record<string, string>
+  | { get(name: string): string | null };
+
+/**
+ * Error with optional headers property.
+ */
+interface ErrorWithHeaders {
+  headers?: HeadersObject;
+}
+
+/**
+ * Extract retry-after delay from error headers.
+ *
+ * Handles both plain object headers and Headers-like objects (from Anthropic SDK).
+ * The retry-after value is expected to be in seconds and is converted to milliseconds.
+ *
+ * @param error - The error that may contain retry-after header
+ * @returns Delay in milliseconds, or null if not present/invalid
+ */
+export function extractRetryAfter(error: unknown): number | null {
+  const errorWithHeaders = error as ErrorWithHeaders;
+
+  if (!errorWithHeaders.headers) {
+    return null;
+  }
+
+  let retryAfterValue: string | null | undefined;
+
+  // Handle Headers-like object (Anthropic SDK uses this)
+  if (typeof errorWithHeaders.headers.get === "function") {
+    retryAfterValue = errorWithHeaders.headers.get("retry-after");
+  } else {
+    // Handle plain object headers
+    const plainHeaders = errorWithHeaders.headers as Record<string, string>;
+    retryAfterValue = plainHeaders["retry-after"];
+  }
+
+  if (!retryAfterValue) {
+    return null;
+  }
+
+  const seconds = parseInt(retryAfterValue, 10);
+  if (isNaN(seconds)) {
+    return null;
+  }
+
+  return seconds * 1000; // Convert to milliseconds
+}
+
+/**
  * Calculate delay for a retry attempt with exponential backoff and jitter.
  *
  * @param attempt - Current attempt number (0-indexed)
@@ -179,8 +232,12 @@ export async function withRetry<T>(
         throw error;
       }
 
-      // Calculate delay
-      const delayMs = calculateDelay(attempt, opts);
+      // Calculate delay, respecting retry-after header if present
+      let delayMs = calculateDelay(attempt, opts);
+      const retryAfterMs = extractRetryAfter(error);
+      if (retryAfterMs !== null) {
+        delayMs = Math.max(delayMs, retryAfterMs);
+      }
 
       // Call retry callback
       opts.onRetry?.(error, attempt + 1, delayMs);

@@ -12,6 +12,8 @@
  */
 
 import { DEFAULT_TUNING } from "../../config/defaults.js";
+import { createRateLimiter, parallel } from "../../utils/concurrency.js";
+import { logger } from "../../utils/logging.js";
 import { withRetry } from "../../utils/retry.js";
 
 import { resolveModelId } from "./cost-estimator.js";
@@ -286,13 +288,26 @@ export async function generateSkillSemanticScenarios(
 }
 
 /**
+ * Options for semantic scenario generation.
+ */
+export interface SemanticGenerationOptions {
+  /** Rate limit API calls (requests per second). null/undefined = no limit. */
+  requestsPerSecond?: number | null;
+  /** Maximum concurrent LLM calls (defaults to 10) */
+  maxConcurrent?: number;
+}
+
+/**
  * Generate semantic scenarios for all skills.
+ *
+ * Uses parallel execution with optional rate limiting.
  *
  * @param client - Anthropic client
  * @param skills - Array of skill components
  * @param model - Model to use
  * @param analysis - Full analysis output for keyword extraction
  * @param onProgress - Optional progress callback
+ * @param options - Optional rate limiting and concurrency options
  * @returns Array of all semantic test scenarios
  */
 export async function generateAllSemanticScenarios(
@@ -301,23 +316,52 @@ export async function generateAllSemanticScenarios(
   model: string,
   analysis: AnalysisOutput,
   onProgress?: (completed: number, total: number, skill: string) => void,
+  options?: SemanticGenerationOptions,
 ): Promise<TestScenario[]> {
   const allComponentKeywords = extractAllComponentKeywords(analysis);
-  const allScenarios: TestScenario[] = [];
+  const maxConcurrent = options?.maxConcurrent ?? 10;
 
-  for (const [i, skill] of skills.entries()) {
-    onProgress?.(i, skills.length, skill.name);
+  // Create rate limiter if configured
+  const rps = options?.requestsPerSecond;
+  const rateLimiter =
+    rps !== null && rps !== undefined ? createRateLimiter(rps) : null;
 
-    const scenarios = await generateSkillSemanticScenarios(
-      client,
-      skill,
-      model,
-      allComponentKeywords,
-    );
-    allScenarios.push(...scenarios);
-
-    onProgress?.(i + 1, skills.length, skill.name);
+  if (rateLimiter) {
+    logger.info(`Rate limiting enabled: ${String(rps)} requests/second`);
   }
 
-  return allScenarios;
+  let completedCount = 0;
+  const result = await parallel({
+    items: skills,
+    concurrency: maxConcurrent,
+    fn: async (skill) => {
+      const generateFn = async (): Promise<TestScenario[]> =>
+        generateSkillSemanticScenarios(
+          client,
+          skill,
+          model,
+          allComponentKeywords,
+        );
+
+      return rateLimiter ? rateLimiter(generateFn) : generateFn();
+    },
+    onComplete: (scenarios, _index, _total) => {
+      completedCount++;
+      const skillName = skills[_index]?.name ?? "unknown";
+      onProgress?.(completedCount, skills.length, skillName);
+      logger.progress(
+        completedCount,
+        skills.length,
+        `Generated ${String(scenarios.length)} semantic scenarios for ${skillName}`,
+      );
+    },
+    onError: (error, skill) => {
+      logger.error(
+        `Failed to generate semantic scenarios for skill ${skill.name}:`,
+        error,
+      );
+    },
+  });
+
+  return result.results.flat();
 }

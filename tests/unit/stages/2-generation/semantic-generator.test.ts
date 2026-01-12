@@ -709,9 +709,9 @@ describe("generateAllSemanticScenarios", () => {
       progressCallback,
     );
 
-    expect(progressCallback).toHaveBeenCalledWith(0, 2, "skill-one");
+    // Called once per completed skill (parallel execution)
+    expect(progressCallback).toHaveBeenCalledTimes(2);
     expect(progressCallback).toHaveBeenCalledWith(1, 2, "skill-one");
-    expect(progressCallback).toHaveBeenCalledWith(1, 2, "skill-two");
     expect(progressCallback).toHaveBeenCalledWith(2, 2, "skill-two");
   });
 

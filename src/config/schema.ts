@@ -114,6 +114,8 @@ export const GenerationConfigSchema = z.object({
   max_tokens: z.number().int().min(1000).max(32000).default(8000),
   reasoning_effort: ReasoningEffortSchema.default("medium"),
   semantic_variations: z.boolean().default(true),
+  /** Rate limit API calls (requests per second). null = no limit. */
+  requests_per_second: z.number().min(0.1).max(100).nullish(),
 });
 
 /**

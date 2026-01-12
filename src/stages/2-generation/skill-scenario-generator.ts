@@ -12,6 +12,7 @@
  * 5. Semantic similarity (synonyms/related phrases)
  */
 
+import { createRateLimiter, parallel } from "../../utils/concurrency.js";
 import { logger } from "../../utils/logging.js";
 import { withRetry } from "../../utils/retry.js";
 
@@ -192,10 +193,13 @@ export async function generateSkillScenarios(
 /**
  * Generate scenarios for all skills.
  *
+ * Uses parallel execution with optional rate limiting.
+ *
  * @param client - Anthropic client
  * @param skills - Array of skill components
  * @param config - Generation config
  * @param onProgress - Optional progress callback
+ * @param maxConcurrent - Maximum concurrent LLM calls (defaults to 10)
  * @returns Array of all test scenarios
  */
 export async function generateAllSkillScenarios(
@@ -203,19 +207,46 @@ export async function generateAllSkillScenarios(
   skills: SkillComponent[],
   config: GenerationConfig,
   onProgress?: (completed: number, total: number, skill: string) => void,
+  maxConcurrent = 10,
 ): Promise<TestScenario[]> {
-  const allScenarios: TestScenario[] = [];
+  // Create rate limiter if configured
+  const rps = config.requests_per_second;
+  const rateLimiter =
+    rps !== null && rps !== undefined ? createRateLimiter(rps) : null;
 
-  for (const [i, skill] of skills.entries()) {
-    onProgress?.(i, skills.length, skill.name);
-
-    const scenarios = await generateSkillScenarios(client, skill, config);
-    allScenarios.push(...scenarios);
-
-    onProgress?.(i + 1, skills.length, skill.name);
+  if (rateLimiter) {
+    logger.info(`Rate limiting enabled: ${String(rps)} requests/second`);
   }
 
-  return allScenarios;
+  let completedCount = 0;
+  const result = await parallel({
+    items: skills,
+    concurrency: maxConcurrent,
+    fn: async (skill) => {
+      const generateFn = async (): Promise<TestScenario[]> =>
+        generateSkillScenarios(client, skill, config);
+
+      return rateLimiter ? rateLimiter(generateFn) : generateFn();
+    },
+    onComplete: (scenarios, _index, _total) => {
+      completedCount++;
+      const skillName = skills[_index]?.name ?? "unknown";
+      onProgress?.(completedCount, skills.length, skillName);
+      logger.progress(
+        completedCount,
+        skills.length,
+        `Generated ${String(scenarios.length)} scenarios for ${skillName}`,
+      );
+    },
+    onError: (error, skill) => {
+      logger.error(
+        `Failed to generate scenarios for skill ${skill.name}:`,
+        error,
+      );
+    },
+  });
+
+  return result.results.flat();
 }
 
 /**

@@ -50,6 +50,8 @@ export interface GenerationConfig {
   reasoning_effort: ReasoningEffort;
   /** Generate semantic synonym variations for skills */
   semantic_variations: boolean;
+  /** Rate limit API calls (requests per second). null/undefined = no limit. */
+  requests_per_second?: number | null;
 }
 
 /**

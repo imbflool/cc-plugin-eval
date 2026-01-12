@@ -14,6 +14,8 @@
  * 5. Proactive scenarios (context-based triggering)
  */
 
+import { createRateLimiter, parallel } from "../../utils/concurrency.js";
+import { logger } from "../../utils/logging.js";
 import { withRetry } from "../../utils/retry.js";
 
 import { resolveModelId } from "./cost-estimator.js";
@@ -171,7 +173,7 @@ export function parseAgentScenarioResponse(
       return scenario;
     });
   } catch (error) {
-    console.error(`Failed to parse agent scenarios for ${agent.name}:`, error);
+    logger.error(`Failed to parse agent scenarios for ${agent.name}:`, error);
     return [];
   }
 }
@@ -211,10 +213,13 @@ export async function generateAgentScenarios(
 /**
  * Generate scenarios for all agents.
  *
+ * Uses parallel execution with optional rate limiting.
+ *
  * @param client - Anthropic client
  * @param agents - Array of agent components
  * @param config - Generation config
  * @param onProgress - Optional progress callback
+ * @param maxConcurrent - Maximum concurrent LLM calls (defaults to 10)
  * @returns Array of all test scenarios
  */
 export async function generateAllAgentScenarios(
@@ -222,19 +227,46 @@ export async function generateAllAgentScenarios(
   agents: AgentComponent[],
   config: GenerationConfig,
   onProgress?: (completed: number, total: number, agent: string) => void,
+  maxConcurrent = 10,
 ): Promise<TestScenario[]> {
-  const allScenarios: TestScenario[] = [];
+  // Create rate limiter if configured
+  const rps = config.requests_per_second;
+  const rateLimiter =
+    rps !== null && rps !== undefined ? createRateLimiter(rps) : null;
 
-  for (const [i, agent] of agents.entries()) {
-    onProgress?.(i, agents.length, agent.name);
-
-    const scenarios = await generateAgentScenarios(client, agent, config);
-    allScenarios.push(...scenarios);
-
-    onProgress?.(i + 1, agents.length, agent.name);
+  if (rateLimiter) {
+    logger.info(`Rate limiting enabled: ${String(rps)} requests/second`);
   }
 
-  return allScenarios;
+  let completedCount = 0;
+  const result = await parallel({
+    items: agents,
+    concurrency: maxConcurrent,
+    fn: async (agent) => {
+      const generateFn = async (): Promise<TestScenario[]> =>
+        generateAgentScenarios(client, agent, config);
+
+      return rateLimiter ? rateLimiter(generateFn) : generateFn();
+    },
+    onComplete: (scenarios, _index, _total) => {
+      completedCount++;
+      const agentName = agents[_index]?.name ?? "unknown";
+      onProgress?.(completedCount, agents.length, agentName);
+      logger.progress(
+        completedCount,
+        agents.length,
+        `Generated ${String(scenarios.length)} scenarios for ${agentName}`,
+      );
+    },
+    onError: (error, agent) => {
+      logger.error(
+        `Failed to generate scenarios for agent ${agent.name}:`,
+        error,
+      );
+    },
+  });
+
+  return result.results.flat();
 }
 
 /**

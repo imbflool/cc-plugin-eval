@@ -132,6 +132,7 @@ export async function runGeneration(
         (completed, total, skill) => {
           onProgress?.("skills", completed, total, skill);
         },
+        config.max_concurrent,
       );
 
       if (skillScenarios.length > 0) {
@@ -169,6 +170,7 @@ export async function runGeneration(
         (completed, total, agent) => {
           onProgress?.("agents", completed, total, agent);
         },
+        config.max_concurrent,
       );
 
       if (agentScenarios.length > 0) {

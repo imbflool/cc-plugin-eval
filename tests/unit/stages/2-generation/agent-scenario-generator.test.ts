@@ -671,10 +671,9 @@ describe("generateAllAgentScenarios", () => {
       progressCallback,
     );
 
-    // Called before and after each agent
-    expect(progressCallback).toHaveBeenCalledWith(0, 2, "agent-one");
+    // Called once per completed agent (parallel execution)
+    expect(progressCallback).toHaveBeenCalledTimes(2);
     expect(progressCallback).toHaveBeenCalledWith(1, 2, "agent-one");
-    expect(progressCallback).toHaveBeenCalledWith(1, 2, "agent-two");
     expect(progressCallback).toHaveBeenCalledWith(2, 2, "agent-two");
   });
 

@@ -121,6 +121,15 @@ scope:
 #       - true - Create paraphrased trigger phrases (tests robustness)
 #       - false - Use only exact trigger patterns from skill descriptions
 #     Default: true
+#
+#   requests_per_second - Rate limit API calls to prevent 429 errors (optional)
+#     Possible values:
+#       - null - No rate limiting (default)
+#       - 0.5 - Very conservative (1 request per 2 seconds)
+#       - 1 - Conservative (1 request per second)
+#       - 2 - Moderate (recommended for safety)
+#     Note: LLM-based generation now runs in parallel. If you experience rate
+#     limit errors, enable this setting to add delays between API calls.
 generation:
   model: "claude-sonnet-4-5-20250929"
   scenarios_per_component: 5
@@ -128,6 +137,7 @@ generation:
   max_tokens: 8000
   reasoning_effort: "medium"
   semantic_variations: true
+  # requests_per_second: 2  # Uncomment to enable rate limiting
 
 # ==============================================================================
 # STAGE 3: EXECUTION - Scenario Execution via Agent SDK

@@ -83,6 +83,7 @@ jobs:
           npm test -- --reporter=verbose tests/e2e/
 
       - name: Upload test results
+        id: upload-e2e-results
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
@@ -92,6 +93,12 @@ jobs:
             coverage/test-report.junit.xml
             results/
           retention-days: 14
+          compression-level: 9
+          if-no-files-found: warn
+
+      - name: Log E2E artifact URL
+        if: always() && steps.upload-e2e-results.outputs.artifact-url
+        run: 'echo "E2E test results artifact: ${{ steps.upload-e2e-results.outputs.artifact-url }}"'
 
       - name: Report E2E status
         if: always()

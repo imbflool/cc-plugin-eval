@@ -151,12 +151,19 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Upload coverage artifact
+        id: upload-coverage
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: coverage-report
           path: coverage/
           retention-days: 7
+          compression-level: 9
+          if-no-files-found: warn
+
+      - name: Log coverage artifact URL
+        if: always() && steps.upload-coverage.outputs.artifact-url
+        run: 'echo "Coverage artifact: ${{ steps.upload-coverage.outputs.artifact-url }}"'
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2

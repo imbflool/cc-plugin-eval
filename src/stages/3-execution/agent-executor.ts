@@ -94,6 +94,7 @@ function buildQueryInput(
   config: ExecutionConfig,
   hooks: PreToolUseHookConfig[],
   abortSignal: AbortSignal,
+  startTime: number,
 ): QueryInput {
   // Build allowed tools list - ensure trigger tools are always included
   const allowedTools = [
@@ -124,6 +125,13 @@ function buildQueryInput(
       allowDangerouslySkipPermissions: true,
       hooks: {
         PreToolUse: hooks,
+      },
+      stderr: (data: string) => {
+        const elapsed = Date.now() - startTime;
+        console.error(
+          `[Scenario ${scenario.id} ${elapsed}ms] SDK stderr:`,
+          data.trim(),
+        );
       },
     },
   };
@@ -209,6 +217,7 @@ export async function executeScenario(
   // Abort controller for timeout handling
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeout_ms);
+  const startTime = Date.now();
 
   try {
     // Build plugin list
@@ -233,6 +242,7 @@ export async function executeScenario(
       config,
       hooks,
       controller.signal,
+      startTime,
     );
 
     // Execute with retry for transient errors

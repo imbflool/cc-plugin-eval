@@ -12,6 +12,7 @@ export default defineConfig({
     // =========================================================================
     environment: "node",
     globals: true,
+    setupFiles: ["./src/env.ts"],
 
     // =========================================================================
     // Test File Patterns

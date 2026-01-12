@@ -163,6 +163,7 @@ export interface QueryOptions {
   hooks?: {
     PreToolUse?: HookCallbackMatcher[];
   };
+  stderr?: (data: string) => void;
 }
 
 /**

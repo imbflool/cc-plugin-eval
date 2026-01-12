@@ -41,5 +41,6 @@ jobs:
           exempt-issue-labels: "pinned,security,roadmap,bug,priority:critical,status:in-progress,status:blocked"
           exempt-pr-labels: "pinned,security,status:in-progress,status:blocked"
           exempt-all-issue-assignees: true
+          exempt-draft-pr: true
           operations-per-run: 100
           enable-statistics: true

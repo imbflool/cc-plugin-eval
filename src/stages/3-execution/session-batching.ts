@@ -120,6 +120,156 @@ export interface BatchExecutionOptions {
 }
 
 /**
+ * Options for building a scenario query input.
+ */
+interface BuildScenarioQueryInputOptions {
+  /** The scenario to execute */
+  scenario: TestScenario;
+  /** Plugin references to load */
+  plugins: PluginReference[];
+  /** Tools to allow */
+  allowedTools: string[];
+  /** Tools to disallow */
+  disallowedTools?: string[] | undefined;
+  /** Model to use */
+  model: string;
+  /** Max turns per scenario */
+  maxTurns: number;
+  /** Max budget per scenario */
+  maxBudgetUsd?: number | undefined;
+  /** Whether this is the first scenario in the batch */
+  isFirst: boolean;
+  /** Abort signal for timeout */
+  abortSignal: AbortSignal;
+  /** Tool capture callback */
+  onToolCapture: (capture: ToolCapture) => void;
+  /** Stderr handler */
+  onStderr: (data: string) => void;
+}
+
+/**
+ * Build query input for a scenario in a batch.
+ *
+ * @param options - Query input options
+ * @returns Query input for the Agent SDK
+ */
+function buildScenarioQueryInput(
+  options: BuildScenarioQueryInputOptions,
+): QueryInput {
+  const {
+    scenario,
+    plugins,
+    allowedTools,
+    disallowedTools,
+    model,
+    maxTurns,
+    maxBudgetUsd,
+    isFirst,
+    abortSignal,
+    onToolCapture,
+    onStderr,
+  } = options;
+
+  return {
+    prompt: scenario.user_prompt,
+    options: {
+      plugins,
+      settingSources: ["project"],
+      allowedTools,
+      ...(disallowedTools ? { disallowedTools } : {}),
+      model,
+      maxTurns,
+      persistSession: true,
+      continue: !isFirst,
+      ...(maxBudgetUsd !== undefined ? { maxBudgetUsd } : {}),
+      abortSignal,
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: ".*",
+            hooks: [
+              async (
+                input,
+                toolUseId,
+                _context,
+              ): Promise<Record<string, unknown>> => {
+                if ("tool_name" in input && "tool_input" in input) {
+                  onToolCapture({
+                    name: input.tool_name,
+                    input: input.tool_input,
+                    toolUseId,
+                    timestamp: Date.now(),
+                  });
+                }
+                return Promise.resolve({});
+              },
+            ],
+          },
+        ],
+      },
+      stderr: onStderr,
+    },
+  };
+}
+
+/**
+ * Options for sending a clear command.
+ */
+interface SendClearCommandOptions {
+  /** Plugin references */
+  plugins: PluginReference[];
+  /** Tools to allow */
+  allowedTools: string[];
+  /** Model to use */
+  model: string;
+  /** Abort signal */
+  abortSignal: AbortSignal;
+  /** Query function (for testing) */
+  queryFn?: QueryFunction | undefined;
+}
+
+/**
+ * Send /clear command to reset the conversation between scenarios.
+ *
+ * @param options - Clear command options
+ */
+async function sendClearCommand(
+  options: SendClearCommandOptions,
+): Promise<void> {
+  const { plugins, allowedTools, model, abortSignal, queryFn } = options;
+
+  logger.debug("Batch: sending /clear to reset conversation");
+
+  const clearQueryInput: QueryInput = {
+    prompt: "/clear",
+    options: {
+      plugins,
+      settingSources: ["project"],
+      allowedTools,
+      model,
+      maxTurns: 1,
+      persistSession: true,
+      continue: true,
+      abortSignal,
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+    },
+  };
+
+  const clearQuery = queryFn
+    ? queryFn(clearQueryInput)
+    : executeQuery(clearQueryInput);
+
+  for await (const _message of clearQuery) {
+    // Just consume
+  }
+
+  logger.debug("Batch: conversation reset complete");
+}
+
+/**
  * Execute a batch of scenarios with session reuse.
  *
  * Uses `persistSession: true` for the first scenario, then `continue: true`
@@ -185,58 +335,25 @@ export async function executeBatch(
       );
 
       // Build query input
-      const isFirst = scenarioIndex === 0;
-      const queryInput: QueryInput = {
-        prompt: scenario.user_prompt,
-        options: {
-          plugins,
-          settingSources: ["project"],
-          allowedTools,
-          ...(config.disallowed_tools
-            ? { disallowedTools: config.disallowed_tools }
-            : {}),
-          model: config.model,
-          maxTurns: config.max_turns,
-          persistSession: true, // Keep session alive
-          continue: !isFirst, // Continue from previous query (reuse session)
-          maxBudgetUsd: config.max_budget_usd,
-          abortSignal: controller.signal,
-          permissionMode: "bypassPermissions",
-          allowDangerouslySkipPermissions: true,
-          hooks: {
-            PreToolUse: [
-              {
-                matcher: ".*",
-                hooks: [
-                  async (
-                    input,
-                    toolUseId,
-                    _context,
-                  ): Promise<Record<string, unknown>> => {
-                    // Capture tools for current scenario
-                    if ("tool_name" in input && "tool_input" in input) {
-                      detectedTools.push({
-                        name: input.tool_name,
-                        input: input.tool_input,
-                        toolUseId,
-                        timestamp: Date.now(),
-                      });
-                    }
-                    return Promise.resolve({});
-                  },
-                ],
-              },
-            ],
-          },
-          stderr: (data: string): void => {
-            const elapsed = Date.now() - startTime;
-            console.error(
-              `[Batch ${pluginName} ${String(elapsed)}ms] SDK stderr:`,
-              data.trim(),
-            );
-          },
+      const queryInput = buildScenarioQueryInput({
+        scenario,
+        plugins,
+        allowedTools,
+        disallowedTools: config.disallowed_tools,
+        model: config.model,
+        maxTurns: config.max_turns,
+        maxBudgetUsd: config.max_budget_usd,
+        isFirst: scenarioIndex === 0,
+        abortSignal: controller.signal,
+        onToolCapture: (capture) => detectedTools.push(capture),
+        onStderr: (data) => {
+          const elapsed = Date.now() - startTime;
+          console.error(
+            `[Batch ${pluginName} ${String(elapsed)}ms] SDK stderr:`,
+            data.trim(),
+          );
         },
-      };
+      });
 
       // Execute with retry for transient errors
       await withRetry(async () => {
@@ -278,35 +395,13 @@ export async function executeBatch(
 
       // Send /clear to reset conversation for next scenario (unless this is the last one)
       if (scenarioIndex < scenarios.length - 1) {
-        logger.debug("Batch: sending /clear to reset conversation");
-
-        const clearQueryInput: QueryInput = {
-          prompt: "/clear",
-          options: {
-            plugins,
-            settingSources: ["project"],
-            allowedTools,
-            model: config.model,
-            maxTurns: 1,
-            persistSession: true,
-            continue: true, // Continue in same session
-            abortSignal: controller.signal,
-            permissionMode: "bypassPermissions",
-            allowDangerouslySkipPermissions: true,
-          },
-        };
-
-        // Execute /clear
-        const clearQuery = queryFn
-          ? queryFn(clearQueryInput)
-          : executeQuery(clearQueryInput);
-
-        // Consume all messages (should just be a result message)
-        for await (const _message of clearQuery) {
-          // Just consume
-        }
-
-        logger.debug("Batch: conversation reset complete");
+        await sendClearCommand({
+          plugins,
+          allowedTools,
+          model: config.model,
+          abortSignal: controller.signal,
+          queryFn,
+        });
       }
     } catch (err) {
       const isTimeout = err instanceof Error && err.name === "AbortError";

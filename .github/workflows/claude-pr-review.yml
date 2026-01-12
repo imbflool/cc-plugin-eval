@@ -110,4 +110,4 @@ jobs:
             4. **Checklist Verification**: Confirm key items are addressed
 
             Be constructive and helpful. Focus on significant issues, not nitpicks.
-          claude_args: '--max-turns 10 --allowedTools "Bash(gh pr:*),Bash(npm run typecheck),Bash(npm run lint),Bash(npx prettier:*),Bash(npm test),Read,Glob,Grep"'
+          claude_args: '--max-turns 15 --allowedTools "Bash(gh pr:*),Bash(npm run typecheck),Bash(npm run lint),Bash(npx prettier:*),Bash(npm test),Read,Glob,Grep"'

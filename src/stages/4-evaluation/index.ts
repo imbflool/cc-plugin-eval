@@ -9,6 +9,10 @@
  * 2. LLM judge assesses quality and handles edge cases
  * 3. Conflict analysis detects multiple component triggers
  *
+ * Batching:
+ * When total LLM judge calls >= batch_threshold, uses Anthropic Batches API
+ * for 50% cost savings on asynchronous evaluation.
+ *
  * Output: results/{plugin-name}/evaluation.json
  */
 
@@ -18,6 +22,13 @@ import { parallel } from "../../utils/concurrency.js";
 import { ensureDir, getResultsDir, writeJson } from "../../utils/file-io.js";
 import { logger } from "../../utils/logging.js";
 
+import {
+  shouldUseBatching,
+  createEvaluationBatch,
+  pollBatchCompletion,
+  collectBatchResults,
+  type BatchEvaluationRequest,
+} from "./batch-evaluator.js";
 import { calculateConflictSeverity } from "./conflict-tracker.js";
 import { createErrorJudgeResponse } from "./llm-judge.js";
 import {
@@ -40,6 +51,7 @@ import type {
   EvalMetrics,
   EvaluationResult,
   ExecutionResult,
+  JudgeResponse,
   MultiSampleResult,
   ProgressCallbacks,
   TestScenario,
@@ -71,6 +83,17 @@ interface EvaluationContext {
 interface JudgeStrategy {
   needsLLMJudge: boolean;
   detectionSource: DetectionSource;
+}
+
+/**
+ * Intermediate result from programmatic detection phase.
+ */
+interface ProgrammaticResult {
+  context: EvaluationContext;
+  uniqueDetections: ReturnType<typeof getUniqueDetections>;
+  triggered: boolean;
+  conflictAnalysis: ReturnType<typeof calculateConflictSeverity>;
+  judgeStrategy: JudgeStrategy;
 }
 
 /**
@@ -167,23 +190,16 @@ function buildEvaluationResult(
 }
 
 /**
- * Evaluate a single scenario.
- *
- * @param client - Anthropic client
- * @param context - Evaluation context
- * @param config - Evaluation configuration
- * @returns Evaluation result with variance for metrics
+ * Run programmatic detection for a scenario.
+ * Returns intermediate results needed for LLM judgment and final evaluation.
  */
-async function evaluateScenario(
-  client: Anthropic,
+function runProgrammaticDetection(
   context: EvaluationContext,
-  config: EvalConfig,
-): Promise<ScenarioEvaluationResult> {
+  detectionMode: "programmatic_first" | "llm_only",
+): ProgrammaticResult {
   const { scenario, execution } = context;
-  const evalConfig = config.evaluation;
 
-  // 1. Programmatic detection (PRIMARY)
-  // Use hook-aware detection for hook scenarios
+  // Programmatic detection
   const detections =
     scenario.component_type === "hook"
       ? detectAllComponentsWithHooks(
@@ -201,13 +217,12 @@ async function evaluateScenario(
   const uniqueDetections = getUniqueDetections(detections);
 
   // Check if expected component triggered
-  // Use hook-specific detection for hook scenarios
   const triggered =
     scenario.component_type === "hook"
       ? wasExpectedHookTriggered(
           execution.hook_responses ?? [],
           scenario.expected_component,
-          scenario.component_ref.split("::")[0], // Extract event type from "EventType::Matcher"
+          scenario.component_ref.split("::")[0],
         )
       : wasExpectedComponentTriggered(
           uniqueDetections,
@@ -215,64 +230,232 @@ async function evaluateScenario(
           scenario.component_type,
         );
 
-  // 2. Conflict analysis
+  // Conflict analysis
   const conflictAnalysis = calculateConflictSeverity(
     scenario.expected_component,
     scenario.component_type,
     uniqueDetections,
   );
 
-  // 3. Determine if LLM judge is needed
-  const { needsLLMJudge, detectionSource } = determineJudgeStrategy(
+  // Judge strategy
+  const judgeStrategy = determineJudgeStrategy(
     scenario,
     triggered,
-    evalConfig.detection_mode,
+    detectionMode,
   );
 
-  // 4. Run LLM judge if needed
-  let judgment: MultiSampleResult | null = null;
+  return {
+    context,
+    uniqueDetections,
+    triggered,
+    conflictAnalysis,
+    judgeStrategy,
+  };
+}
 
-  if (needsLLMJudge) {
-    try {
-      judgment = await runJudgment(
-        client,
-        scenario,
-        execution.transcript,
-        uniqueDetections,
-        evalConfig,
-      );
-    } catch (err) {
-      const errorResponse = createErrorJudgeResponse(
-        err instanceof Error ? err.message : String(err),
-      );
-      judgment = {
-        individual_scores: [0],
-        aggregated_score: 0,
-        score_variance: 0,
-        consensus_trigger_accuracy: "incorrect",
-        is_unanimous: true, // Error case has single fallback value
-        all_issues: errorResponse.issues,
-        representative_response: errorResponse,
-      };
-    }
-  }
+/**
+ * Build final evaluation result from programmatic result and optional judgment.
+ */
+function buildFinalResult(
+  programmatic: ProgrammaticResult,
+  judgment: MultiSampleResult | null,
+): ScenarioEvaluationResult {
+  const {
+    context,
+    triggered,
+    uniqueDetections,
+    conflictAnalysis,
+    judgeStrategy,
+  } = programmatic;
 
-  // 5. Build and return evaluation result with variance and consensus
   const result = buildEvaluationResult(
-    scenario,
+    context.scenario,
     triggered,
     uniqueDetections,
     conflictAnalysis,
     judgment,
-    detectionSource,
+    judgeStrategy.detectionSource,
   );
 
-  // Extract variance and unanimity from judgment
-  // (defaults: 0 variance for no judgment, true unanimity for single/no sample)
   const variance = judgment?.score_variance ?? 0;
   const isUnanimous = judgment?.is_unanimous ?? true;
 
   return { result, variance, isUnanimous };
+}
+
+/**
+ * Convert JudgeResponse to MultiSampleResult for compatibility.
+ */
+function judgeResponseToMultiSample(
+  response: JudgeResponse,
+): MultiSampleResult {
+  return {
+    individual_scores: [response.quality_score],
+    aggregated_score: response.quality_score,
+    score_variance: 0,
+    consensus_trigger_accuracy: response.trigger_accuracy,
+    is_unanimous: true,
+    all_issues: response.issues,
+    representative_response: response,
+  };
+}
+
+/**
+ * Run batched LLM evaluation using Anthropic Batches API.
+ * Returns a map of scenario_id+sample to judgment results.
+ */
+async function runBatchedEvaluation(
+  client: Anthropic,
+  programmaticResults: ProgrammaticResult[],
+  config: EvalConfig,
+  _progress: ProgressCallbacks,
+): Promise<Map<string, JudgeResponse>> {
+  const { num_samples } = config.evaluation;
+
+  // Collect all batch requests
+  const batchRequests: BatchEvaluationRequest[] = [];
+  for (const pr of programmaticResults) {
+    if (!pr.judgeStrategy.needsLLMJudge) {
+      continue;
+    }
+
+    for (let sampleIdx = 0; sampleIdx < num_samples; sampleIdx++) {
+      batchRequests.push({
+        scenario: pr.context.scenario,
+        transcript: pr.context.execution.transcript,
+        programmaticResult: pr.uniqueDetections,
+        sampleIndex: sampleIdx,
+      });
+    }
+  }
+
+  if (batchRequests.length === 0) {
+    return new Map();
+  }
+
+  logger.info(
+    `Submitting ${String(batchRequests.length)} evaluation requests to Batches API (50% cost savings)`,
+  );
+
+  // Create batch
+  const batchId = await createEvaluationBatch(
+    client,
+    batchRequests,
+    config.evaluation,
+  );
+  logger.info(`Batch submitted: ${batchId}`);
+
+  // Poll for completion
+  const batch = await pollBatchCompletion(client, batchId, {
+    pollIntervalMs: config.poll_interval_ms,
+    timeoutMs: config.batch_timeout_ms,
+    onProgress: (counts) => {
+      const total =
+        counts.processing +
+        counts.succeeded +
+        counts.errored +
+        counts.canceled +
+        counts.expired;
+      logger.progress(
+        counts.succeeded + counts.errored,
+        total,
+        `Batch processing: ${String(counts.succeeded)} succeeded, ${String(counts.errored)} errored`,
+      );
+    },
+  });
+
+  logger.success(
+    `Batch complete: ${String(batch.request_counts.succeeded)} succeeded, ` +
+      `${String(batch.request_counts.errored)} errored`,
+  );
+
+  // Collect results
+  return collectBatchResults(client, batchId);
+}
+
+/**
+ * Run synchronous LLM evaluation (original behavior).
+ */
+async function runSynchronousEvaluation(
+  client: Anthropic,
+  programmaticResults: ProgrammaticResult[],
+  config: EvalConfig,
+  progress: ProgressCallbacks,
+  sampleData: {
+    scenarioId: string;
+    variance: number;
+    numSamples: number;
+    hasConsensus: boolean;
+  }[],
+): Promise<ScenarioEvaluationResult[]> {
+  const evalConfig = config.evaluation;
+
+  const parallelResult = await parallel<
+    ProgrammaticResult,
+    ScenarioEvaluationResult
+  >({
+    items: programmaticResults,
+    concurrency: config.max_concurrent,
+    fn: async (pr: ProgrammaticResult, index: number) => {
+      let judgment: MultiSampleResult | null = null;
+
+      if (pr.judgeStrategy.needsLLMJudge) {
+        try {
+          judgment = await runJudgment(
+            client,
+            pr.context.scenario,
+            pr.context.execution.transcript,
+            pr.uniqueDetections,
+            evalConfig,
+          );
+        } catch (err) {
+          const errorResponse = createErrorJudgeResponse(
+            err instanceof Error ? err.message : String(err),
+          );
+          judgment = {
+            individual_scores: [0],
+            aggregated_score: 0,
+            score_variance: 0,
+            consensus_trigger_accuracy: "incorrect",
+            is_unanimous: true,
+            all_issues: errorResponse.issues,
+            representative_response: errorResponse,
+          };
+        }
+      }
+
+      const evalResult = buildFinalResult(pr, judgment);
+
+      // Track sample data if using multi-sampling
+      if (config.evaluation.num_samples > 1 && judgment) {
+        sampleData.push({
+          scenarioId: evalResult.result.scenario_id,
+          variance: evalResult.variance,
+          numSamples: config.evaluation.num_samples,
+          hasConsensus: evalResult.isUnanimous,
+        });
+      }
+
+      logger.progress(
+        index + 1,
+        programmaticResults.length,
+        `${evalResult.result.scenario_id}: ${evalResult.result.triggered ? "triggered" : "not triggered"}`,
+      );
+
+      return evalResult;
+    },
+    onError: (error: Error, pr: ProgrammaticResult) => {
+      progress.onError?.(error, pr.context.scenario);
+      logger.error(
+        `Evaluation failed for ${pr.context.scenario.id}: ${error.message}`,
+      );
+    },
+    continueOnError: true,
+  });
+
+  return (
+    parallelResult.results as (ScenarioEvaluationResult | undefined)[]
+  ).filter((r): r is ScenarioEvaluationResult => r !== undefined);
 }
 
 /**
@@ -281,29 +464,15 @@ async function evaluateScenario(
  * Evaluates all execution results to determine component triggering
  * accuracy and quality.
  *
+ * Uses Anthropic Batches API when total LLM judge calls >= batch_threshold
+ * for 50% cost savings.
+ *
  * @param pluginName - Plugin name
  * @param scenarios - Test scenarios
  * @param executions - Execution results from Stage 3
  * @param config - Evaluation configuration
  * @param progress - Optional progress callbacks
  * @returns Evaluation output with results and metrics
- *
- * @example
- * ```typescript
- * const evaluationOutput = await runEvaluation(
- *   'my-plugin',
- *   scenarios,
- *   executionResults,
- *   config,
- *   {
- *     onScenarioComplete: (result, i, total) => {
- *       console.log(`Evaluated ${i}/${total}: ${result.scenario_id}`);
- *     }
- *   }
- * );
- *
- * console.log(`Accuracy: ${evaluationOutput.metrics.accuracy * 100}%`);
- * ```
  */
 export async function runEvaluation(
   pluginName: string,
@@ -329,7 +498,6 @@ export async function runEvaluation(
   }
 
   // Create Anthropic client for LLM judge
-  // Disable SDK retries - all retries handled by withRetry() in src/utils/retry.ts
   const client = new Anthropic({ maxRetries: 0 });
 
   // Build scenario map for quick lookup
@@ -351,63 +519,130 @@ export async function runEvaluation(
 
   progress.onStageStart?.("evaluation", contexts.length);
 
-  // Track sample data for metrics (including trigger_accuracy consensus)
+  // Phase 1: Run programmatic detection for all scenarios
+  logger.info("Running programmatic detection...");
+  const programmaticResults = contexts.map((ctx) =>
+    runProgrammaticDetection(ctx, config.evaluation.detection_mode),
+  );
+
+  // Count total LLM judge calls needed
+  const scenariosNeedingJudge = programmaticResults.filter(
+    (pr) => pr.judgeStrategy.needsLLMJudge,
+  ).length;
+  const totalJudgeCalls = scenariosNeedingJudge * config.evaluation.num_samples;
+
+  // Determine if batching should be used
+  const useBatching = shouldUseBatching({
+    totalJudgeCalls,
+    batchThreshold: config.batch_threshold,
+    forceSynchronous: config.force_synchronous,
+  });
+
+  // Track sample data for metrics
   const sampleData: {
     scenarioId: string;
     variance: number;
     numSamples: number;
-    /** Whether all samples agreed on trigger_accuracy */
     hasConsensus: boolean;
   }[] = [];
 
-  // Evaluate all scenarios in parallel
-  const parallelResult = await parallel<
-    EvaluationContext,
-    ScenarioEvaluationResult
-  >({
-    items: contexts,
-    concurrency: config.max_concurrent,
-    fn: async (context: EvaluationContext, index: number) => {
-      const { result, variance, isUnanimous } = await evaluateScenario(
-        client,
-        context,
-        config,
-      );
+  let evalResults: ScenarioEvaluationResult[];
 
-      // Track sample data if using multi-sampling
+  if (useBatching) {
+    logger.info(
+      `Using Batches API for ${String(totalJudgeCalls)} judge calls (threshold: ${String(config.batch_threshold)})`,
+    );
+
+    // Phase 2a: Run batched LLM evaluation
+    const batchResults = await runBatchedEvaluation(
+      client,
+      programmaticResults,
+      config,
+      progress,
+    );
+
+    // Phase 3a: Build final results using batch responses
+    evalResults = programmaticResults.map((pr) => {
+      if (!pr.judgeStrategy.needsLLMJudge) {
+        return buildFinalResult(pr, null);
+      }
+
+      // Collect all sample results for this scenario
+      const sampleResponses: JudgeResponse[] = [];
+      for (
+        let sampleIdx = 0;
+        sampleIdx < config.evaluation.num_samples;
+        sampleIdx++
+      ) {
+        const customId = `${pr.context.scenario.id}_sample-${String(sampleIdx)}`;
+        const response = batchResults.get(customId);
+        if (response) {
+          sampleResponses.push(response);
+        }
+      }
+
+      if (sampleResponses.length === 0) {
+        // All samples failed
+        const errorResponse = createErrorJudgeResponse(
+          "No batch results received",
+        );
+        return buildFinalResult(pr, judgeResponseToMultiSample(errorResponse));
+      }
+
+      // Aggregate samples
+      const scores = sampleResponses.map((r) => r.quality_score);
+      const aggregatedScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+      const accuracyVotes = sampleResponses.map((r) => r.trigger_accuracy);
+      const consensus = getMajorityVote(accuracyVotes);
+      const isUnanimous = accuracyVotes.every((v) => v === accuracyVotes[0]);
+      const variance = calculateVarianceFromScores(scores);
+
+      // sampleResponses[0] is guaranteed to exist because sampleResponses.length > 0
+      // eslint-disable-next-line @typescript-eslint/non-nullable-type-assertion-style
+      const firstResponse = sampleResponses[0] as JudgeResponse;
+      const multiSample: MultiSampleResult = {
+        individual_scores: scores,
+        aggregated_score: aggregatedScore,
+        score_variance: variance,
+        consensus_trigger_accuracy: consensus,
+        is_unanimous: isUnanimous,
+        all_issues: [...new Set(sampleResponses.flatMap((r) => r.issues))],
+        representative_response: {
+          ...firstResponse,
+          quality_score: aggregatedScore,
+          trigger_accuracy: consensus,
+        },
+      };
+
+      // Track sample data
       if (config.evaluation.num_samples > 1) {
         sampleData.push({
-          scenarioId: result.scenario_id,
+          scenarioId: pr.context.scenario.id,
           variance,
           numSamples: config.evaluation.num_samples,
           hasConsensus: isUnanimous,
         });
       }
 
-      // Note: onScenarioComplete expects ExecutionResult, not EvaluationResult
-      // Use logging instead for evaluation progress
-      logger.progress(
-        index + 1,
-        contexts.length,
-        `${result.scenario_id}: ${result.triggered ? "triggered" : "not triggered"}`,
-      );
-      return { result, variance, isUnanimous };
-    },
-    onError: (error: Error, context: EvaluationContext) => {
-      progress.onError?.(error, context.scenario);
-      logger.error(
-        `Evaluation failed for ${context.scenario.id}: ${error.message}`,
-      );
-    },
-    continueOnError: true,
-  });
+      return buildFinalResult(pr, multiSample);
+    });
+  } else {
+    logger.info(
+      `Using synchronous evaluation for ${String(totalJudgeCalls)} judge calls ` +
+        `(below threshold: ${String(config.batch_threshold)})`,
+    );
 
-  // Filter valid results (parallel may return undefined for failed items)
-  const results = (
-    parallelResult.results as (ScenarioEvaluationResult | undefined)[]
-  )
-    .filter((r): r is ScenarioEvaluationResult => r !== undefined)
-    .map((r) => r.result);
+    // Phase 2b: Run synchronous LLM evaluation
+    evalResults = await runSynchronousEvaluation(
+      client,
+      programmaticResults,
+      config,
+      progress,
+      sampleData,
+    );
+  }
+
+  const results = evalResults.map((r) => r.result);
 
   // Build results with context for metrics
   const resultsWithContext = results.map((result) => {
@@ -423,20 +658,14 @@ export async function runEvaluation(
   const metricsOptions: {
     numSamples?: number;
     numReps?: number;
-    sampleData?: {
-      scenarioId: string;
-      variance: number;
-      numSamples: number;
-      hasConsensus: boolean;
-    }[];
+    sampleData?: typeof sampleData;
     flakyScenarios?: string[];
   } = {
     numSamples: config.evaluation.num_samples,
     numReps: config.execution.num_reps,
-    flakyScenarios: [], // Would need to track from repetition analysis
+    flakyScenarios: [],
   };
 
-  // Only add sampleData if we have data
   if (sampleData.length > 0) {
     metricsOptions.sampleData = sampleData;
   }
@@ -467,6 +696,46 @@ export async function runEvaluation(
     total_cost_usd: metrics.total_cost_usd,
     total_duration_ms: totalDuration,
   };
+}
+
+/**
+ * Get majority vote for trigger accuracy.
+ */
+function getMajorityVote(
+  votes: ("correct" | "incorrect" | "partial")[],
+): "correct" | "incorrect" | "partial" {
+  if (votes.length === 0) {
+    return "incorrect";
+  }
+  const counts = { correct: 0, incorrect: 0, partial: 0 };
+  for (const v of votes) {
+    counts[v]++;
+  }
+  let maxKey: keyof typeof counts = "incorrect";
+  let maxCount = 0;
+  for (const [key, count] of Object.entries(counts) as [
+    keyof typeof counts,
+    number,
+  ][]) {
+    if (count > maxCount) {
+      maxCount = count;
+      maxKey = key;
+    }
+  }
+  return maxKey;
+}
+
+/**
+ * Calculate variance from scores.
+ */
+function calculateVarianceFromScores(scores: number[]): number {
+  if (scores.length === 0) {
+    return 0;
+  }
+  const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+  return (
+    scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / scores.length
+  );
 }
 
 /**
@@ -551,3 +820,16 @@ export {
   formatMetrics,
   createEmptyMetrics,
 } from "./metrics.js";
+
+export {
+  shouldUseBatching,
+  createBatchRequests,
+  createEvaluationBatch,
+  pollBatchCompletion,
+  collectBatchResults,
+  cancelBatch,
+  parseCustomId,
+  type BatchEvaluationRequest,
+  type BatchingOptions,
+  type PollOptions,
+} from "./batch-evaluator.js";

@@ -20,6 +20,8 @@ export interface TokenEstimate {
   input_tokens: number;
   estimated_output_tokens: number;
   estimated_cost_usd: number;
+  /** Whether this estimate uses batch pricing (50% discount) */
+  is_batched?: boolean;
 }
 
 /**

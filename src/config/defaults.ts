@@ -152,6 +152,7 @@ export function createDefaultConfig(pluginPath: string): EvalConfig {
     batch_threshold: 50,
     force_synchronous: false,
     poll_interval_ms: 30000,
+    batch_timeout_ms: 1800000, // 30 minutes
     rewind_file_changes: false,
     debug: false,
     verbose: false,

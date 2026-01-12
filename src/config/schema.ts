@@ -275,6 +275,7 @@ export const EvalConfigSchema = z.object({
   batch_threshold: z.number().int().min(1).default(50),
   force_synchronous: z.boolean().default(false),
   poll_interval_ms: z.number().int().min(1000).default(30000),
+  batch_timeout_ms: z.number().int().min(60000).max(86400000).default(1800000),
   rewind_file_changes: z.boolean().default(false),
   mcp_servers: McpServersConfigSchema.optional(),
   conflict_detection: ConflictDetectionConfigSchema.optional(),

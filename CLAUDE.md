@@ -79,6 +79,17 @@ cc-plugin-eval run -p ./plugin --fast    # Re-run failed scenarios only
 - Hooks detected via `SDKHookResponseMessage` events from Agent SDK
 - LLM judge is secondary, used only for quality assessment
 
+### Stage 4 Batching
+
+**Anthropic Batches API integration** for cost savings:
+
+- When total LLM judge calls >= `batch_threshold` (default 50), uses Batches API for **50% cost savings** via async processing
+- Configure `batch_timeout_ms` (default 30 min) for max wait time
+- Configure `poll_interval_ms` (default 30 sec) for status polling
+- Set `force_synchronous: true` to bypass batching for testing
+- Multi-sampling fully supported with batch aggregation
+- Graceful fallback to synchronous evaluation when below threshold
+
 ### Two SDK Integration Points
 
 | SDK                              | Stages | Purpose                               |

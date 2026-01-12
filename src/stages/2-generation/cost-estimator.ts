@@ -157,17 +157,32 @@ export function estimateExecutionCost(
 }
 
 /**
+ * Batch discount applied by Anthropic Batches API.
+ * Batches API provides 50% off standard pricing.
+ */
+export const BATCH_DISCOUNT_MULTIPLIER = 0.5;
+
+/**
  * Estimate evaluation cost based on scenario count.
  *
  * @param scenarioCount - Number of scenarios
  * @param model - Evaluation model
  * @param numSamples - Samples per evaluation
+ * @param options - Additional options
  * @returns Token estimate
  */
 export function estimateEvaluationCost(
   scenarioCount: number,
   model: string,
   numSamples = 1,
+  options: {
+    /** Use batch pricing (50% discount) */
+    useBatchPricing?: boolean;
+    /** Batch threshold for automatic detection */
+    batchThreshold?: number;
+    /** Force synchronous execution */
+    forceSynchronous?: boolean;
+  } = {},
 ): TokenEstimate {
   const totalEvaluations = scenarioCount * numSamples;
 
@@ -178,13 +193,28 @@ export function estimateEvaluationCost(
     totalEvaluations * DEFAULT_TUNING.token_estimates.judge_output;
 
   const resolvedModel = resolveModelId(model);
-  const estimatedCost = calculateCost(resolvedModel, inputTokens, outputTokens);
+  let estimatedCost = calculateCost(resolvedModel, inputTokens, outputTokens);
+
+  // Determine if batch pricing applies
+  const {
+    useBatchPricing,
+    batchThreshold = 50,
+    forceSynchronous = false,
+  } = options;
+  const willUseBatching =
+    useBatchPricing ??
+    (!forceSynchronous && totalEvaluations >= batchThreshold);
+
+  if (willUseBatching) {
+    estimatedCost *= BATCH_DISCOUNT_MULTIPLIER;
+  }
 
   return {
     stage: "evaluation",
     input_tokens: inputTokens,
     estimated_output_tokens: outputTokens,
     estimated_cost_usd: estimatedCost,
+    is_batched: willUseBatching,
   };
 }
 
@@ -303,6 +333,10 @@ export function estimatePipelineCost(
       scenarioCount,
       config.evaluation.model,
       config.evaluation.num_samples,
+      {
+        batchThreshold: config.batch_threshold,
+        forceSynchronous: config.force_synchronous,
+      },
     ),
   );
 
@@ -328,14 +362,18 @@ export function formatPipelineCostEstimate(
   const lines: string[] = ["Pipeline Cost Estimate:", "─".repeat(40)];
 
   for (const stage of estimate.stages) {
+    const stageLabel = stage.is_batched
+      ? `${stage.stage} (batched)`
+      : stage.stage;
     lines.push(
-      `  ${stage.stage.padEnd(12)} Input: ${stage.input_tokens.toLocaleString().padStart(8)} tokens`,
+      `  ${stageLabel.padEnd(20)} Input: ${stage.input_tokens.toLocaleString().padStart(8)} tokens`,
     );
     lines.push(
-      `  ${"".padEnd(12)} Output: ${stage.estimated_output_tokens.toLocaleString().padStart(7)} tokens`,
+      `  ${"".padEnd(20)} Output: ${stage.estimated_output_tokens.toLocaleString().padStart(7)} tokens`,
     );
+    const costNote = stage.is_batched ? " (50% discount)" : "";
     lines.push(
-      `  ${"".padEnd(12)} Cost: ${formatCost(stage.estimated_cost_usd).padStart(10)}`,
+      `  ${"".padEnd(20)} Cost: ${formatCost(stage.estimated_cost_usd).padStart(10)}${costNote}`,
     );
     lines.push("");
   }

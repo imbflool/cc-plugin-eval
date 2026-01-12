@@ -297,6 +297,8 @@ export interface EvalConfig {
   force_synchronous: boolean;
   /** Batch status polling interval */
   poll_interval_ms: number;
+  /** Maximum time to wait for batch completion in milliseconds */
+  batch_timeout_ms: number;
   /** Undo file changes after each scenario */
   rewind_file_changes: boolean;
   mcp_servers?: McpServersConfig;

@@ -38,14 +38,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
-          node-version: "20"
+          node-version-file: ".nvmrc"
 
       - name: Cache node_modules
         uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         id: node-modules-cache
         with:
           path: node_modules
-          key: ${{ runner.os }}-node-20-modules-${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-node-${{ hashFiles('.nvmrc') }}-modules-${{ hashFiles('package-lock.json') }}
 
       - name: Install dependencies
         if: steps.node-modules-cache.outputs.cache-hit != 'true'

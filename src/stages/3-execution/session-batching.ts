@@ -117,6 +117,8 @@ export interface BatchExecutionOptions {
   onScenarioComplete?:
     | ((result: ExecutionResult, index: number) => void)
     | undefined;
+  /** Enable file checkpointing to revert file changes after each scenario */
+  useCheckpointing?: boolean | undefined;
 }
 
 /**
@@ -145,6 +147,8 @@ interface BuildScenarioQueryInputOptions {
   onToolCapture: (capture: ToolCapture) => void;
   /** Stderr handler */
   onStderr: (data: string) => void;
+  /** Enable file checkpointing for rewind support */
+  enableFileCheckpointing?: boolean | undefined;
 }
 
 /**
@@ -168,6 +172,7 @@ function buildScenarioQueryInput(
     abortSignal,
     onToolCapture,
     onStderr,
+    enableFileCheckpointing,
   } = options;
 
   return {
@@ -182,6 +187,7 @@ function buildScenarioQueryInput(
       persistSession: true,
       continue: !isFirst,
       ...(maxBudgetUsd !== undefined ? { maxBudgetUsd } : {}),
+      ...(enableFileCheckpointing ? { enableFileCheckpointing } : {}),
       abortSignal,
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
@@ -270,6 +276,35 @@ async function sendClearCommand(
 }
 
 /**
+ * Rewind file changes after scenario execution.
+ *
+ * @param queryObject - The query object with rewindFiles method
+ * @param userMessageId - The user message ID to rewind to
+ * @param scenarioId - The scenario ID for logging
+ */
+async function rewindFileChanges(
+  queryObject: { rewindFiles?: (messageId: string) => Promise<void> },
+  userMessageId: string,
+  scenarioId: string,
+): Promise<void> {
+  if (typeof queryObject.rewindFiles !== "function") {
+    logger.debug(
+      `Batch: rewindFiles not available for ${scenarioId}, skipping checkpoint`,
+    );
+    return;
+  }
+
+  try {
+    await queryObject.rewindFiles(userMessageId);
+    logger.debug(`Batch: reverted file changes for scenario: ${scenarioId}`);
+  } catch (rewindErr) {
+    logger.warn(
+      `Batch: failed to rewind files for ${scenarioId}: ${rewindErr instanceof Error ? rewindErr.message : String(rewindErr)}`,
+    );
+  }
+}
+
+/**
  * Execute a batch of scenarios with session reuse.
  *
  * Uses `persistSession: true` for the first scenario, then `continue: true`
@@ -291,6 +326,7 @@ export async function executeBatch(
     additionalPlugins = [],
     queryFn,
     onScenarioComplete,
+    useCheckpointing = false,
   } = options;
 
   if (scenarios.length === 0) {
@@ -324,6 +360,7 @@ export async function executeBatch(
     const scenarioErrors: TranscriptErrorEvent[] = [];
     const detectedTools: ToolCapture[] = [];
     const hookCollector = createHookResponseCollector();
+    let userMessageId: string | undefined;
 
     // Create abort controller for this scenario
     const controller = new AbortController();
@@ -353,15 +390,34 @@ export async function executeBatch(
             data.trim(),
           );
         },
+        enableFileCheckpointing: useCheckpointing,
       });
 
       // Execute with retry for transient errors
+      // Keep reference to query object for rewindFiles
+      let queryObject: Awaited<ReturnType<typeof executeQuery>> | undefined;
       await withRetry(async () => {
         const q = queryFn ? queryFn(queryInput) : executeQuery(queryInput);
+        queryObject = q;
 
         for await (const message of q) {
           scenarioMessages.push(message);
           hookCollector.processMessage(message);
+
+          // Capture the FIRST user message ID for file checkpointing.
+          // We only need the first because we want to rewind to the state
+          // before the scenario prompt, not any follow-up messages.
+          // Note: /clear commands are sent via a separate query object
+          // (sendClearCommand), so they don't appear in this iteration.
+          if (message.type === "user" && !userMessageId) {
+            // SDK may use 'id' or 'uuid' for the message identifier
+            const msgId =
+              (message as { id?: string }).id ??
+              (message as { uuid?: string }).uuid;
+            if (msgId) {
+              userMessageId = msgId;
+            }
+          }
 
           // Capture errors
           if (isErrorMessage(message)) {
@@ -373,6 +429,15 @@ export async function executeBatch(
               recoverable: false,
             });
           }
+        }
+
+        // Rewind file changes after scenario execution if checkpointing is enabled.
+        // This works with persistSession: true because the SDK maintains file
+        // checkpoints per message ID, independent of session state. The rewind
+        // happens BEFORE /clear is sent, ensuring filesystem is reset while
+        // keeping the session alive for the next scenario.
+        if (useCheckpointing && userMessageId) {
+          await rewindFileChanges(queryObject, userMessageId, scenario.id);
         }
       });
 

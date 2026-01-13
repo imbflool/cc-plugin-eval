@@ -300,23 +300,6 @@ async function executeBatchedScenarios(
     progress,
   } = options;
 
-  // Note: checkpointing is not compatible with session reuse
-  if (useCheckpointing) {
-    logger.warn(
-      "File checkpointing is not compatible with session batching. Falling back to isolated execution.",
-    );
-    // Fall back to isolated execution for each scenario
-    return executeAllScenariosIsolated({
-      scenarios: Array.from(groups.values()).flat(),
-      pluginPath,
-      pluginName,
-      config,
-      useCheckpointing: true,
-      queryFn,
-      progress,
-    });
-  }
-
   // Flatten groups into array of batches
   const batches = Array.from(groups.entries());
   const allResults: ExecutionResult[] = [];
@@ -355,6 +338,7 @@ async function executeBatchedScenarios(
           config: config.execution,
           additionalPlugins: config.execution.additional_plugins,
           queryFn,
+          useCheckpointing,
           onScenarioComplete: (result, _index) => {
             completedCount++;
             progress?.onScenarioComplete?.(

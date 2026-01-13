@@ -459,20 +459,158 @@ async function runSynchronousEvaluation(
 }
 
 /**
+ * Aggregate batch results into final evaluation results.
+ *
+ * @param programmaticResults - Results from programmatic detection
+ * @param batchResults - Map of batch responses by custom ID
+ * @param config - Evaluation configuration
+ * @param sampleData - Array to track sample data for metrics
+ * @returns Array of scenario evaluation results
+ */
+function aggregateBatchResults(
+  programmaticResults: ProgrammaticResult[],
+  batchResults: Map<string, JudgeResponse>,
+  config: EvalConfig,
+  sampleData: {
+    scenarioId: string;
+    variance: number;
+    numSamples: number;
+    hasConsensus: boolean;
+  }[],
+): ScenarioEvaluationResult[] {
+  return programmaticResults.map((pr) => {
+    if (!pr.judgeStrategy.needsLLMJudge) {
+      return buildFinalResult(pr, null);
+    }
+
+    // Collect all sample results for this scenario
+    const sampleResponses: JudgeResponse[] = [];
+    for (
+      let sampleIdx = 0;
+      sampleIdx < config.evaluation.num_samples;
+      sampleIdx++
+    ) {
+      const customId = `${pr.context.scenario.id}_sample-${String(sampleIdx)}`;
+      const response = batchResults.get(customId);
+      if (response) {
+        sampleResponses.push(response);
+      }
+    }
+
+    if (sampleResponses.length === 0) {
+      // All samples failed
+      const errorResponse = createErrorJudgeResponse(
+        "No batch results received",
+      );
+      return buildFinalResult(pr, judgeResponseToMultiSample(errorResponse));
+    }
+
+    // Aggregate samples
+    const scores = sampleResponses.map((r) => r.quality_score);
+    const aggregatedScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const accuracyVotes = sampleResponses.map((r) => r.trigger_accuracy);
+    const consensus = getMajorityVote(accuracyVotes);
+    const isUnanimous = accuracyVotes.every((v) => v === accuracyVotes[0]);
+    const variance = calculateVarianceFromScores(scores);
+
+    // sampleResponses[0] is guaranteed to exist because sampleResponses.length > 0
+    // eslint-disable-next-line @typescript-eslint/non-nullable-type-assertion-style
+    const firstResponse = sampleResponses[0] as JudgeResponse;
+    const multiSample: MultiSampleResult = {
+      individual_scores: scores,
+      aggregated_score: aggregatedScore,
+      score_variance: variance,
+      consensus_trigger_accuracy: consensus,
+      is_unanimous: isUnanimous,
+      all_issues: [...new Set(sampleResponses.flatMap((r) => r.issues))],
+      representative_response: {
+        ...firstResponse,
+        quality_score: aggregatedScore,
+        trigger_accuracy: consensus,
+      },
+    };
+
+    // Track sample data
+    if (config.evaluation.num_samples > 1) {
+      sampleData.push({
+        scenarioId: pr.context.scenario.id,
+        variance,
+        numSamples: config.evaluation.num_samples,
+        hasConsensus: isUnanimous,
+      });
+    }
+
+    return buildFinalResult(pr, multiSample);
+  });
+}
+
+/**
+ * Calculate metrics and save evaluation results.
+ *
+ * @param pluginName - Plugin name
+ * @param resultsWithContext - Results with scenario and execution context
+ * @param executions - Execution results
+ * @param config - Evaluation configuration
+ * @param sampleData - Sample data for multi-sampling metrics
+ * @returns Calculated metrics
+ */
+function calculateAndSaveMetrics(
+  pluginName: string,
+  resultsWithContext: {
+    result: EvaluationResult;
+    scenario: TestScenario;
+    execution: ExecutionResult;
+  }[],
+  executions: ExecutionResult[],
+  config: EvalConfig,
+  sampleData: {
+    scenarioId: string;
+    variance: number;
+    numSamples: number;
+    hasConsensus: boolean;
+  }[],
+): EvalMetrics {
+  // Build metrics options
+  const metricsOptions: {
+    numSamples?: number;
+    numReps?: number;
+    sampleData?: typeof sampleData;
+    flakyScenarios?: string[];
+  } = {
+    numSamples: config.evaluation.num_samples,
+    numReps: config.execution.num_reps,
+    flakyScenarios: [],
+  };
+
+  if (sampleData.length > 0) {
+    metricsOptions.sampleData = sampleData;
+  }
+
+  const metrics = calculateEvalMetrics(
+    resultsWithContext,
+    executions,
+    metricsOptions,
+  );
+
+  // Log metrics summary
+  logger.info(formatMetrics(metrics));
+
+  // Save evaluation results
+  const results = resultsWithContext.map((r) => r.result);
+  saveEvaluationResults(pluginName, results, metrics, config);
+
+  return metrics;
+}
+
+/**
  * Run Stage 4: Evaluation.
- *
- * Evaluates all execution results to determine component triggering
- * accuracy and quality.
- *
- * Uses Anthropic Batches API when total LLM judge calls >= batch_threshold
- * for 50% cost savings.
  *
  * @param pluginName - Plugin name
  * @param scenarios - Test scenarios
- * @param executions - Execution results from Stage 3
+ * @param executions - Execution results
  * @param config - Evaluation configuration
- * @param progress - Optional progress callbacks
- * @returns Evaluation output with results and metrics
+ * @param progress - Progress callbacks
+ * @returns Evaluation output
  */
 export async function runEvaluation(
   pluginName: string,
@@ -562,70 +700,12 @@ export async function runEvaluation(
     );
 
     // Phase 3a: Build final results using batch responses
-    evalResults = programmaticResults.map((pr) => {
-      if (!pr.judgeStrategy.needsLLMJudge) {
-        return buildFinalResult(pr, null);
-      }
-
-      // Collect all sample results for this scenario
-      const sampleResponses: JudgeResponse[] = [];
-      for (
-        let sampleIdx = 0;
-        sampleIdx < config.evaluation.num_samples;
-        sampleIdx++
-      ) {
-        const customId = `${pr.context.scenario.id}_sample-${String(sampleIdx)}`;
-        const response = batchResults.get(customId);
-        if (response) {
-          sampleResponses.push(response);
-        }
-      }
-
-      if (sampleResponses.length === 0) {
-        // All samples failed
-        const errorResponse = createErrorJudgeResponse(
-          "No batch results received",
-        );
-        return buildFinalResult(pr, judgeResponseToMultiSample(errorResponse));
-      }
-
-      // Aggregate samples
-      const scores = sampleResponses.map((r) => r.quality_score);
-      const aggregatedScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-      const accuracyVotes = sampleResponses.map((r) => r.trigger_accuracy);
-      const consensus = getMajorityVote(accuracyVotes);
-      const isUnanimous = accuracyVotes.every((v) => v === accuracyVotes[0]);
-      const variance = calculateVarianceFromScores(scores);
-
-      // sampleResponses[0] is guaranteed to exist because sampleResponses.length > 0
-      // eslint-disable-next-line @typescript-eslint/non-nullable-type-assertion-style
-      const firstResponse = sampleResponses[0] as JudgeResponse;
-      const multiSample: MultiSampleResult = {
-        individual_scores: scores,
-        aggregated_score: aggregatedScore,
-        score_variance: variance,
-        consensus_trigger_accuracy: consensus,
-        is_unanimous: isUnanimous,
-        all_issues: [...new Set(sampleResponses.flatMap((r) => r.issues))],
-        representative_response: {
-          ...firstResponse,
-          quality_score: aggregatedScore,
-          trigger_accuracy: consensus,
-        },
-      };
-
-      // Track sample data
-      if (config.evaluation.num_samples > 1) {
-        sampleData.push({
-          scenarioId: pr.context.scenario.id,
-          variance,
-          numSamples: config.evaluation.num_samples,
-          hasConsensus: isUnanimous,
-        });
-      }
-
-      return buildFinalResult(pr, multiSample);
-    });
+    evalResults = aggregateBatchResults(
+      programmaticResults,
+      batchResults,
+      config,
+      sampleData,
+    );
   } else {
     logger.info(
       `Using synchronous evaluation for ${String(totalJudgeCalls)} judge calls ` +
@@ -654,35 +734,16 @@ export async function runEvaluation(
     };
   });
 
-  // Calculate metrics
-  const metricsOptions: {
-    numSamples?: number;
-    numReps?: number;
-    sampleData?: typeof sampleData;
-    flakyScenarios?: string[];
-  } = {
-    numSamples: config.evaluation.num_samples,
-    numReps: config.execution.num_reps,
-    flakyScenarios: [],
-  };
-
-  if (sampleData.length > 0) {
-    metricsOptions.sampleData = sampleData;
-  }
-
-  const metrics = calculateEvalMetrics(
+  // Calculate metrics and save results
+  const metrics = calculateAndSaveMetrics(
+    pluginName,
     resultsWithContext,
     executions,
-    metricsOptions,
+    config,
+    sampleData,
   );
 
   const totalDuration = Date.now() - startTime;
-
-  // Log metrics summary
-  logger.info(formatMetrics(metrics));
-
-  // Save evaluation results
-  saveEvaluationResults(pluginName, results, metrics, config);
 
   logger.success(
     `Evaluation complete: ${String(results.length)} scenarios evaluated`,

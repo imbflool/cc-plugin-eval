@@ -42,21 +42,12 @@ interface GeneratedAgentScenario {
 }
 
 /**
- * Agent scenario prompt template.
+ * Cacheable system instructions for agent scenario generation.
+ *
+ * These instructions are reused across all agents and benefit from
+ * Anthropic's prompt caching (90% cost reduction after first call).
  */
-const AGENT_SCENARIO_PROMPT = `Generate test scenarios for this Claude Code agent:
-
-Name: {{agent_name}}
-Description: {{description}}
-Model: {{model}}
-{{#if tools}}Available Tools: {{tools}}{{/if}}
-{{#if examples}}
-Example triggers:
-{{examples}}
-{{/if}}
-
-Generate exactly {{scenario_count}} test scenarios distributed as follows:
-{{type_distribution}}
+const AGENT_SCENARIO_SYSTEM_PROMPT = `You generate test scenarios for Claude Code agent triggering evaluation.
 
 For each scenario, provide a JSON object with:
 - user_prompt: What the user would type to trigger this agent
@@ -76,11 +67,31 @@ IMPORTANT:
 Output ONLY a JSON array of scenario objects. No markdown, no explanation.`;
 
 /**
- * Build prompt for agent scenario generation.
+ * User prompt template for agent scenario generation (variable data only).
+ */
+const AGENT_USER_PROMPT_TEMPLATE = `Generate test scenarios for this Claude Code agent:
+
+Name: {{agent_name}}
+Description: {{description}}
+Model: {{model}}
+{{#if tools}}Available Tools: {{tools}}{{/if}}
+{{#if examples}}
+Example triggers:
+{{examples}}
+{{/if}}
+
+Generate exactly {{scenario_count}} test scenarios distributed as follows:
+{{type_distribution}}`;
+
+/**
+ * Build user prompt for agent scenario generation.
+ *
+ * Returns only the variable data (agent details) - the static instructions
+ * are in AGENT_SCENARIO_SYSTEM_PROMPT for caching.
  *
  * @param agent - Agent component
  * @param scenarioCount - Total scenarios to generate
- * @returns Prompt string
+ * @returns User prompt string with variable data
  */
 export function buildAgentPrompt(
   agent: AgentComponent,
@@ -106,7 +117,7 @@ export function buildAgentPrompt(
     .map((ex) => `  - Context: ${ex.context}\n    User: "${ex.user_message}"`)
     .join("\n");
 
-  let prompt = AGENT_SCENARIO_PROMPT.replace("{{agent_name}}", agent.name)
+  let prompt = AGENT_USER_PROMPT_TEMPLATE.replace("{{agent_name}}", agent.name)
     .replace("{{description}}", agent.description)
     .replace("{{model}}", agent.model)
     .replace("{{scenario_count}}", scenarioCount.toString())
@@ -181,6 +192,9 @@ export function parseAgentScenarioResponse(
 /**
  * Generate scenarios for a single agent using LLM.
  *
+ * Uses Anthropic's prompt caching for the system instructions to reduce
+ * input token costs by ~90% after the first call within the cache TTL.
+ *
  * @param client - Anthropic client
  * @param agent - Agent component
  * @param config - Generation config
@@ -191,13 +205,20 @@ export async function generateAgentScenarios(
   agent: AgentComponent,
   config: GenerationConfig,
 ): Promise<TestScenario[]> {
-  const prompt = buildAgentPrompt(agent, config.scenarios_per_component);
+  const userPrompt = buildAgentPrompt(agent, config.scenarios_per_component);
 
   const response = await withRetry(async () => {
     const result = await client.messages.create({
       model: resolveModelId(config.model),
       max_tokens: config.max_tokens,
-      messages: [{ role: "user", content: prompt }],
+      system: [
+        {
+          type: "text",
+          text: AGENT_SCENARIO_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      messages: [{ role: "user", content: userPrompt }],
     });
 
     const textBlock = result.content.find((block) => block.type === "text");

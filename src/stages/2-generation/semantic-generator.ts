@@ -27,9 +27,12 @@ import type {
 import type Anthropic from "@anthropic-ai/sdk";
 
 /**
- * Semantic variation prompt template.
+ * Cacheable system instructions for semantic variation generation.
+ *
+ * These instructions are reused across all trigger phrases and benefit
+ * from Anthropic's prompt caching (90% cost reduction after first call).
  */
-const SEMANTIC_VARIATION_PROMPT = `Given this trigger phrase: "{{trigger_phrase}}"
+const SEMANTIC_VARIATION_SYSTEM_PROMPT = `You generate semantically equivalent phrases for testing Claude Code skill triggering.
 
 Generate 3 semantically equivalent phrases that should trigger the same behavior.
 Focus on:
@@ -41,7 +44,7 @@ Focus on:
 Return ONLY a JSON array (no markdown):
 [
   {
-    "original": "{{trigger_phrase}}",
+    "original": "<the trigger phrase>",
     "variation": "semantically equivalent phrase",
     "variation_type": "synonym" | "related_concept" | "structure" | "informal",
     "explanation": "why this should trigger the same behavior"
@@ -64,6 +67,9 @@ const COMPONENT_TYPES = [
 /**
  * Generate semantic variations for a trigger phrase.
  *
+ * Uses Anthropic's prompt caching for the system instructions to reduce
+ * input token costs by ~90% after the first call within the cache TTL.
+ *
  * @param client - Anthropic client
  * @param triggerPhrase - Original trigger phrase
  * @param model - Model to use
@@ -74,17 +80,24 @@ export async function generateSemanticVariations(
   triggerPhrase: string,
   model: string,
 ): Promise<SemanticVariation[]> {
-  const prompt = SEMANTIC_VARIATION_PROMPT.replace(
-    /{{trigger_phrase}}/g,
-    triggerPhrase,
-  );
-
   try {
     const response = await withRetry(async () => {
       const result = await client.messages.create({
         model: resolveModelId(model),
         max_tokens: DEFAULT_TUNING.token_estimates.semantic_gen_max_tokens,
-        messages: [{ role: "user", content: prompt }],
+        system: [
+          {
+            type: "text",
+            text: SEMANTIC_VARIATION_SYSTEM_PROMPT,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        messages: [
+          {
+            role: "user",
+            content: `Generate semantic variations for this trigger phrase: "${triggerPhrase}"`,
+          },
+        ],
       });
 
       const textBlock = result.content.find((block) => block.type === "text");

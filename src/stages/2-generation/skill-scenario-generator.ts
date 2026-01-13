@@ -44,16 +44,12 @@ interface GeneratedScenario {
 }
 
 /**
- * Skill scenario prompt template.
+ * Cacheable system instructions for skill scenario generation.
+ *
+ * These instructions are reused across all skills and benefit from
+ * Anthropic's prompt caching (90% cost reduction after first call).
  */
-const SKILL_SCENARIO_PROMPT = `Generate test scenarios for this Claude Code skill:
-
-Name: {{skill_name}}
-Description: {{description}}
-Trigger phrases: {{trigger_phrases}}
-
-Generate exactly {{scenario_count}} test scenarios distributed as follows:
-{{type_distribution}}
+const SKILL_SCENARIO_SYSTEM_PROMPT = `You generate test scenarios for Claude Code skill triggering evaluation.
 
 For each scenario, provide a JSON object with:
 - user_prompt: What the user would type
@@ -73,12 +69,27 @@ IMPORTANT:
 Output ONLY a JSON array of scenario objects. No markdown, no explanation.`;
 
 /**
- * Build prompt for skill scenario generation.
+ * Build user prompt for skill scenario generation (variable data only).
+ */
+const SKILL_USER_PROMPT_TEMPLATE = `Generate test scenarios for this Claude Code skill:
+
+Name: {{skill_name}}
+Description: {{description}}
+Trigger phrases: {{trigger_phrases}}
+
+Generate exactly {{scenario_count}} test scenarios distributed as follows:
+{{type_distribution}}`;
+
+/**
+ * Build user prompt for skill scenario generation.
+ *
+ * Returns only the variable data (skill details) - the static instructions
+ * are in SKILL_SCENARIO_SYSTEM_PROMPT for caching.
  *
  * @param skill - Skill component
  * @param scenarioCount - Total scenarios to generate
  * @param includeSemantic - Whether to include semantic scenarios
- * @returns Prompt string
+ * @returns User prompt string with variable data
  */
 export function buildSkillPrompt(
   skill: SkillComponent,
@@ -94,7 +105,7 @@ export function buildSkillPrompt(
     .map(([type, count]) => `- ${String(count)} ${type} scenarios`)
     .join("\n");
 
-  return SKILL_SCENARIO_PROMPT.replace("{{skill_name}}", skill.name)
+  return SKILL_USER_PROMPT_TEMPLATE.replace("{{skill_name}}", skill.name)
     .replace("{{description}}", skill.description)
     .replace("{{trigger_phrases}}", skill.trigger_phrases.join(", "))
     .replace("{{scenario_count}}", scenarioCount.toString())
@@ -156,6 +167,9 @@ export function parseSkillScenarioResponse(
 /**
  * Generate scenarios for a single skill using LLM.
  *
+ * Uses Anthropic's prompt caching for the system instructions to reduce
+ * input token costs by ~90% after the first call within the cache TTL.
+ *
  * @param client - Anthropic client
  * @param skill - Skill component
  * @param config - Generation config
@@ -166,7 +180,7 @@ export async function generateSkillScenarios(
   skill: SkillComponent,
   config: GenerationConfig,
 ): Promise<TestScenario[]> {
-  const prompt = buildSkillPrompt(
+  const userPrompt = buildSkillPrompt(
     skill,
     config.scenarios_per_component,
     config.semantic_variations,
@@ -176,7 +190,14 @@ export async function generateSkillScenarios(
     const result = await client.messages.create({
       model: resolveModelId(config.model),
       max_tokens: config.max_tokens,
-      messages: [{ role: "user", content: prompt }],
+      system: [
+        {
+          type: "text",
+          text: SKILL_SCENARIO_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      messages: [{ role: "user", content: userPrompt }],
     });
 
     // Extract text content

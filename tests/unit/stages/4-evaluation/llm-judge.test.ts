@@ -315,7 +315,7 @@ describe("buildJudgePrompt", () => {
     const prompt = buildJudgePrompt(scenario, transcript, detections, config);
 
     expect(prompt).toContain(
-      "Notable quotes demonstrating good or bad behavior",
+      "Include notable quotes demonstrating good or bad behavior",
     );
   });
 

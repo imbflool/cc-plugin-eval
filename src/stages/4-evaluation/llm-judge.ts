@@ -79,9 +79,37 @@ const JUDGE_RESPONSE_SCHEMA = {
 };
 
 /**
- * Judge prompt template.
+ * Cacheable system instructions for LLM judge evaluation.
+ *
+ * These instructions are reused across all scenario evaluations and benefit
+ * from Anthropic's prompt caching (90% cost reduction after first call).
  */
-const JUDGE_PROMPT_TEMPLATE = `You are evaluating a Claude Code plugin test execution.
+const JUDGE_SYSTEM_PROMPT = `You are an evaluator for Claude Code plugin test executions.
+
+Evaluate each test execution based on:
+1. quality_score (1-10): How well did the component respond to the user's request?
+2. response_relevance (1-10): Did the response align with the component's stated purpose?
+3. trigger_accuracy: Was the triggering behavior correct given the scenario type?
+   - "correct": Component triggered when expected, or didn't trigger when not expected
+   - "incorrect": Component triggered when it shouldn't, or didn't trigger when it should
+   - "partial": Component triggered but response was incomplete or had issues
+4. issues: List any problems, errors, or unexpected behaviors
+5. highlights: Notable quotes with citation grounding to message IDs
+6. summary: Brief overall assessment
+
+For negative scenarios (expected_trigger: false):
+- "correct" means the component did NOT trigger (which is desired)
+- "incorrect" means the component DID trigger (false positive)
+
+For positive scenarios (expected_trigger: true):
+- "correct" means the component triggered and responded appropriately
+- "incorrect" means the component did NOT trigger (false negative)
+- "partial" means it triggered but had issues`;
+
+/**
+ * User prompt template for judge evaluation (variable data only).
+ */
+const JUDGE_USER_PROMPT_TEMPLATE = `Evaluate this Claude Code plugin test execution:
 
 PLUGIN: {{plugin_name}}
 COMPONENT BEING TESTED: {{expected_component}} ({{component_type}})
@@ -95,25 +123,7 @@ TRANSCRIPT (with message IDs for citation):
 COMPONENT DETAILS:
 {{component_ref}}
 
-Evaluate:
-1. quality_score (1-10): How well did the component respond to the user's request?
-2. response_relevance (1-10): Did the response align with the component's stated purpose?
-3. trigger_accuracy: Was the triggering behavior correct given the scenario type?
-   - "correct": Component triggered when expected, or didn't trigger when not expected
-   - "incorrect": Component triggered when it shouldn't, or didn't trigger when it should
-   - "partial": Component triggered but response was incomplete or had issues
-4. issues: List any problems, errors, or unexpected behaviors
-5. highlights: {{citation_instruction}}
-6. summary: Brief overall assessment
-
-For negative scenarios (expected_trigger: false):
-- "correct" means the component did NOT trigger (which is desired)
-- "incorrect" means the component DID trigger (false positive)
-
-For positive scenarios (expected_trigger: true):
-- "correct" means the component triggered and responded appropriately
-- "incorrect" means the component did NOT trigger (false negative)
-- "partial" means it triggered but had issues`;
+{{citation_instruction}}`;
 
 /**
  * Format transcript events with message IDs for citation grounding.
@@ -184,13 +194,16 @@ function formatEvent(event: TranscriptEvent, maxContentLength: number): string {
 }
 
 /**
- * Build the judge prompt from scenario and transcript.
+ * Build the user prompt for judge evaluation.
+ *
+ * Returns only the variable data (scenario details, transcript) - the static
+ * instructions are in JUDGE_SYSTEM_PROMPT for caching.
  *
  * @param scenario - Test scenario
  * @param transcript - Execution transcript
  * @param programmaticResult - Programmatic detection results
  * @param config - Evaluation configuration
- * @returns Complete judge prompt
+ * @returns User prompt with variable data
  */
 export function buildJudgePrompt(
   scenario: TestScenario,
@@ -208,10 +221,10 @@ export function buildJudgePrompt(
       : "No components detected";
 
   const citationInstruction = config.include_citations
-    ? "For each highlight, include message_id and quoted_text for citation grounding"
-    : "Notable quotes demonstrating good or bad behavior";
+    ? "For each highlight, include message_id and quoted_text for citation grounding."
+    : "Include notable quotes demonstrating good or bad behavior.";
 
-  return JUDGE_PROMPT_TEMPLATE.replace(
+  return JUDGE_USER_PROMPT_TEMPLATE.replace(
     "{{plugin_name}}",
     transcript.metadata.plugin_name,
   )
@@ -279,7 +292,8 @@ function parseJudgeResponse(text: string): JudgeResponse {
 /**
  * Evaluate a scenario using the LLM judge.
  *
- * Uses Anthropic's beta structured output API for guaranteed JSON parsing.
+ * Uses Anthropic's beta structured output API for guaranteed JSON parsing,
+ * with prompt caching for the system instructions to reduce input token costs.
  *
  * @param client - Anthropic client
  * @param scenario - Test scenario
@@ -308,7 +322,7 @@ export async function evaluateWithLLMJudge(
   programmaticResult: ProgrammaticDetection[],
   config: EvaluationConfig,
 ): Promise<JudgeResponse> {
-  const prompt = buildJudgePrompt(
+  const userPrompt = buildJudgePrompt(
     scenario,
     transcript,
     programmaticResult,
@@ -316,12 +330,18 @@ export async function evaluateWithLLMJudge(
   );
 
   const response = await withRetry(async () => {
-    // Use Anthropic's beta structured output API
-    // The SDK automatically adds the required beta header
+    // Use Anthropic's beta structured output API with prompt caching
     const result = await client.beta.messages.create({
       model: resolveModelId(config.model),
       max_tokens: config.max_tokens,
-      messages: [{ role: "user", content: prompt }],
+      system: [
+        {
+          type: "text",
+          text: JUDGE_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      messages: [{ role: "user", content: userPrompt }],
       betas: ["structured-outputs-2025-11-13"],
       // Anthropic uses output_format with schema directly (not nested json_schema)
       output_format: {
@@ -388,7 +408,28 @@ export async function evaluateWithFallback(
 }
 
 /**
+ * Cacheable JSON schema instructions for fallback evaluation.
+ *
+ * Separate from JUDGE_SYSTEM_PROMPT because this includes the output schema.
+ */
+const JUDGE_FALLBACK_SYSTEM_PROMPT = `${JUDGE_SYSTEM_PROMPT}
+
+Respond with ONLY a JSON object matching this schema:
+{
+  "quality_score": number (1-10),
+  "response_relevance": number (1-10),
+  "trigger_accuracy": "correct" | "incorrect" | "partial",
+  "issues": string[],
+  "highlights": [{ "description": string, "message_id": string, "quoted_text": string }],
+  "summary": string
+}
+
+No markdown, no explanation - just the JSON.`;
+
+/**
  * Evaluate using regular JSON output (fallback method).
+ *
+ * Uses prompt caching for the system instructions to reduce input token costs.
  *
  * @param client - Anthropic client
  * @param scenario - Test scenario
@@ -404,32 +445,25 @@ async function evaluateWithJsonFallback(
   programmaticResult: ProgrammaticDetection[],
   config: EvaluationConfig,
 ): Promise<JudgeResponse> {
-  const basePrompt = buildJudgePrompt(
+  const userPrompt = buildJudgePrompt(
     scenario,
     transcript,
     programmaticResult,
     config,
   );
 
-  const prompt = `${basePrompt}
-
-Respond with ONLY a JSON object matching this schema:
-{
-  "quality_score": number (1-10),
-  "response_relevance": number (1-10),
-  "trigger_accuracy": "correct" | "incorrect" | "partial",
-  "issues": string[],
-  "highlights": [{ "description": string, "message_id": string, "quoted_text": string }],
-  "summary": string
-}
-
-No markdown, no explanation - just the JSON.`;
-
   const response = await withRetry(async () => {
     const result = await client.messages.create({
       model: resolveModelId(config.model),
       max_tokens: config.max_tokens,
-      messages: [{ role: "user", content: prompt }],
+      system: [
+        {
+          type: "text",
+          text: JUDGE_FALLBACK_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      messages: [{ role: "user", content: userPrompt }],
     });
 
     const textBlock = result.content.find((block) => block.type === "text");

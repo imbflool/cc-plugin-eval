@@ -28,6 +28,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -78,7 +79,7 @@ jobs:
             ```
 
             After applying labels, briefly explain your reasoning.
-          claude_args: '--max-turns 6 --allowedTools "Bash(gh label:*),Bash(gh issue:*)"'
+          claude_args: '--allowedTools "Bash(gh label:*),Bash(gh issue:*)"'
 
   label-pr:
     name: Label Pull Request
@@ -92,6 +93,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -143,4 +145,4 @@ jobs:
             ```
 
             After applying labels, briefly explain your reasoning.
-          claude_args: '--max-turns 6 --allowedTools "Bash(gh label:*),Bash(gh pr:*),Read,Glob"'
+          claude_args: '--allowedTools "Bash(gh label:*),Bash(gh pr:*),Read,Glob"'

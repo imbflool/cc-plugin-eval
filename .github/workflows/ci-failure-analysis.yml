@@ -37,6 +37,7 @@ jobs:
       pull-requests: write
       issues: write
       actions: read
+      id-token: write
 
     steps:
       # NOTE: No checkout step - analyzing untrusted code from forks is a security risk
@@ -168,4 +169,4 @@ jobs:
 
             Summarize what you found and what action was taken (comment posted, no PR found, etc.).
 
-          claude_args: '--max-turns 5 --allowedTools "mcp__github_ci__get_ci_status,mcp__github_ci__get_workflow_run_details,mcp__github_ci__download_job_log,Bash(gh run view:*),Bash(gh pr list:*),Bash(gh pr comment:*),Bash(gh pr view:*)"'
+          claude_args: '--allowedTools "mcp__github_ci__get_ci_status,mcp__github_ci__get_workflow_run_details,mcp__github_ci__download_job_log,Bash(gh run view:*),Bash(gh pr list:*),Bash(gh pr comment:*),Bash(gh pr view:*)"'

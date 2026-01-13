@@ -120,4 +120,4 @@ jobs:
                - **Suggestions**: General improvements (not covered by inline comments)
 
             Be constructive. Focus on significant issues, not nitpicks.
-          claude_args: '--max-turns 12 --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(npm run typecheck),Bash(npm run lint),Bash(npx prettier:*),Bash(npm test),Read,Glob,Grep"'
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(npm run typecheck),Bash(npm run lint),Bash(npx prettier:*),Bash(npm test:*),Read,Glob,Grep"'

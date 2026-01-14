@@ -64,12 +64,12 @@ cc-plugin-eval run -p ./plugin --fast    # Re-run failed scenarios only
 
 ### 4-Stage Pipeline
 
-| Stage             | Purpose                                                                             | Output           |
-| ----------------- | ----------------------------------------------------------------------------------- | ---------------- |
-| **1. Analysis**   | Parse plugin structure, extract triggers                                            | `analysis.json`  |
-| **2. Generation** | Create test scenarios (LLM for skills/agents, deterministic for commands/hooks/MCP) | `scenarios.json` |
-| **3. Execution**  | Run scenarios via Claude Agent SDK with tool capture                                | `transcripts/`   |
-| **4. Evaluation** | Programmatic detection first, LLM judge fallback, metrics calculation               | `results.json`   |
+| Stage             | Purpose                                                                             | Output            |
+| ----------------- | ----------------------------------------------------------------------------------- | ----------------- |
+| **1. Analysis**   | Parse plugin structure, extract triggers                                            | `analysis.json`   |
+| **2. Generation** | Create test scenarios (LLM for skills/agents, deterministic for commands/hooks/MCP) | `scenarios.json`  |
+| **3. Execution**  | Run scenarios via Claude Agent SDK with tool capture                                | `transcripts/`    |
+| **4. Evaluation** | Programmatic detection first, LLM judge fallback, metrics calculation               | `evaluation.json` |
 
 ### Key Entry Points
 
@@ -211,7 +211,7 @@ E2E tests in `tests/e2e/` make real API calls and cost money. They are skipped b
 
 ### Fixtures
 
-Test fixtures live in `tests/fixtures/`. Sample transcripts are in `tests/fixtures/sample-transcripts/`. Mock plugins are in `tests/fixtures/sample-plugin/`.
+Test fixtures live in `tests/fixtures/`. Sample transcripts are in `tests/fixtures/sample-transcripts/`. Mock plugins are in `tests/fixtures/valid-plugin/`.
 
 ## CI/CD
 

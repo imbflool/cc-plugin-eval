@@ -382,7 +382,9 @@ src/
 │   │   ├── agent-analyzer.ts
 │   │   ├── command-analyzer.ts
 │   │   ├── hook-analyzer.ts
-│   │   └── mcp-analyzer.ts
+│   │   ├── mcp-analyzer.ts
+│   │   ├── path-resolver.ts
+│   │   └── preflight.ts
 │   ├── 2-generation/     # Scenario generation
 │   │   ├── skill-scenario-generator.ts
 │   │   ├── agent-scenario-generator.ts
@@ -390,17 +392,24 @@ src/
 │   │   ├── hook-scenario-generator.ts
 │   │   ├── mcp-scenario-generator.ts
 │   │   ├── semantic-generator.ts
-│   │   └── cost-estimator.ts
+│   │   ├── cost-estimator.ts
+│   │   ├── batch-calculator.ts
+│   │   └── diversity-manager.ts
 │   ├── 3-execution/      # Agent SDK integration
 │   │   ├── agent-executor.ts
 │   │   ├── plugin-loader.ts
 │   │   ├── sdk-client.ts
-│   │   └── hook-capture.ts
+│   │   ├── hook-capture.ts
+│   │   ├── session-batching.ts
+│   │   ├── transcript-builder.ts
+│   │   └── progress-reporters.ts
 │   └── 4-evaluation/     # Detection & metrics
 │       ├── programmatic-detector.ts
 │       ├── llm-judge.ts
 │       ├── metrics.ts
-│       └── conflict-tracker.ts
+│       ├── conflict-tracker.ts
+│       ├── batch-evaluator.ts
+│       └── multi-sampler.ts
 ├── state/                # Resume capability
 │   └── state-manager.ts
 ├── types/                # TypeScript interfaces
@@ -408,7 +417,8 @@ src/
     ├── retry.ts
     ├── concurrency.ts
     ├── sanitizer.ts
-    └── logging.ts
+    ├── logging.ts
+    └── file-io.ts
 
 tests/
 ├── unit/                 # Unit tests (mirror src/ structure)

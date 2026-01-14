@@ -99,15 +99,15 @@ export function createE2EExecutionConfig(
     max_turns: 2,
     timeout_ms: 60000, // 60 second timeout per scenario
     max_budget_usd: E2E_DEFAULT_BUDGET_USD,
-    // E2E tests use isolated sessions for test predictability and to avoid
-    // cross-test state contamination. Production defaults to batched_by_component
-    // for performance. Set session_strategy: "batched_by_component" for batching.
-    session_isolation: true,
+    // E2E tests use batched sessions (production default) for performance.
+    // Sessions are reset between scenarios via /clear commands to maintain isolation.
+    // Set session_isolation: true for isolated testing if needed.
+    session_isolation: false,
     permission_bypass: true,
     disallowed_tools: ["Write", "Edit", "Bash"], // Block file modifications
     num_reps: 1,
     additional_plugins: [],
-    requests_per_second: 1, // Rate limit to avoid API throttling
+    requests_per_second: 2, // Conservative rate limit (2x default for faster E2E)
     ...overrides,
   };
 }
@@ -235,7 +235,7 @@ export function createE2EConfig(options: E2EConfigOptions = {}): EvalConfig {
     rewind_file_changes: true,
     debug: false,
     verbose: false,
-    max_concurrent: 1, // Sequential execution for predictability
+    max_concurrent: 3, // Parallel execution for faster E2E tests
   };
 }
 

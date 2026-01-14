@@ -30,17 +30,36 @@ import {
 // Skip all tests if E2E is not enabled
 const describeE2E = shouldRunE2E() ? describe : describe.skip;
 
-// Track total cost across all tests for budget monitoring
+// Track metrics across all tests for performance monitoring
 let totalE2ECost = 0;
+let e2eStartTime = 0;
+let e2eTestCount = 0;
 
 describeE2E("E2E: Full Pipeline Integration", () => {
   beforeAll(() => {
     validateE2EEnvironment();
+    e2eStartTime = Date.now();
   });
 
   afterAll(() => {
-    // Log total E2E cost for visibility
-    console.log(`\nE2E Total Cost: $${totalE2ECost.toFixed(4)}`);
+    const totalDurationMs = Date.now() - e2eStartTime;
+    const totalDurationSec = totalDurationMs / 1000;
+
+    console.log("\n========================================");
+    console.log("E2E Performance Metrics");
+    console.log("========================================");
+    console.log(`Total Cost:       $${totalE2ECost.toFixed(4)}`);
+    console.log(`Total Duration:   ${totalDurationSec.toFixed(1)}s`);
+    console.log(`Tests Executed:   ${e2eTestCount}`);
+    if (totalDurationSec > 0) {
+      console.log(
+        `Cost Efficiency:  $${((totalE2ECost / totalDurationSec) * 60).toFixed(4)}/min`,
+      );
+      console.log(
+        `Avg Time/Test:    ${(totalDurationSec / Math.max(e2eTestCount, 1)).toFixed(1)}s`,
+      );
+    }
+    console.log("========================================\n");
   });
 
   describe("Stage 1: Analysis", () => {
@@ -145,8 +164,9 @@ describeE2E("E2E: Full Pipeline Integration", () => {
         consoleProgress,
       );
 
-      // Track cost
+      // Track cost and test count
       totalE2ECost += execution.total_cost_usd;
+      e2eTestCount++;
       expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
 
       // Verify execution results
@@ -197,6 +217,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
       );
 
       totalE2ECost += execution.total_cost_usd;
+      e2eTestCount++;
       expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
 
       expect(execution.results.length).toBeGreaterThan(0);
@@ -236,6 +257,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
       );
 
       totalE2ECost += execution.total_cost_usd;
+      e2eTestCount++;
       expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
 
       // Stage 4: Evaluation
@@ -293,6 +315,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
       );
 
       totalE2ECost += execution.total_cost_usd;
+      e2eTestCount++;
       expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
 
       const evaluation = await runEvaluation(
@@ -343,6 +366,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
       );
 
       totalE2ECost += execution.total_cost_usd;
+      e2eTestCount++;
 
       // Verify actual cost is within reasonable range of estimate
       // Allow 3x variance since estimates are conservative
@@ -468,6 +492,7 @@ describeE2E("E2E: Stage Isolation", () => {
       );
 
       totalE2ECost += execution.total_cost_usd;
+      e2eTestCount++;
 
       const evaluation = await runEvaluation(
         analysis.plugin_name,
@@ -490,5 +515,51 @@ describeE2E("E2E: Stage Isolation", () => {
         expect(programmaticCount).toBeGreaterThan(0);
       }
     }, 180000);
+  });
+
+  describe("Session Strategy Validation", () => {
+    it("validates isolated session mode still works", async () => {
+      // Explicitly test isolated mode to ensure backward compatibility
+      const config = createE2EConfig({
+        scope: { skills: true },
+        generation: { scenarios_per_component: 1 },
+        execution: {
+          session_isolation: true, // Override to test isolated mode
+          max_turns: 2,
+          max_budget_usd: 0.02,
+        },
+      });
+
+      const analysis = await runAnalysis(config);
+
+      // Only proceed if we have skills to test
+      if (analysis.components.skills.length === 0) {
+        console.log("Skipping isolated mode test: no skills in test plugin");
+        return;
+      }
+
+      const generation = await runGeneration(analysis, config);
+      const execution = await runExecution(
+        analysis,
+        generation.scenarios,
+        config,
+        consoleProgress,
+      );
+
+      totalE2ECost += execution.total_cost_usd;
+      e2eTestCount++;
+      expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+
+      // Verify isolated mode execution completed successfully
+      expect(execution.results.length).toBe(generation.scenarios.length);
+      expect(execution.results.every((r) => r.status === "completed")).toBe(
+        true,
+      );
+
+      console.log(
+        `\nE2E Isolated Mode: ${execution.results.length} scenarios, ` +
+          `$${execution.total_cost_usd.toFixed(4)} cost`,
+      );
+    }, 120000);
   });
 });

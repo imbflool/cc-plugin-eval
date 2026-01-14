@@ -42,6 +42,20 @@ export function shouldRunE2E(): boolean {
   return process.env.RUN_E2E_TESTS === "true";
 }
 
+/**
+ * Check if MCP E2E tests should run.
+ *
+ * MCP tests are gated behind a separate env var because:
+ * - MCP server connections add significant latency (5-10s startup)
+ * - External dependencies (npx, network) may cause flakiness
+ * - Detection logic is already validated in unit tests
+ *
+ * Run with: RUN_E2E_TESTS=true RUN_E2E_MCP_TESTS=true npm test
+ */
+export function shouldRunE2EMcp(): boolean {
+  return shouldRunE2E() && process.env.RUN_E2E_MCP_TESTS === "true";
+}
+
 // =============================================================================
 // Configuration Factories
 // =============================================================================

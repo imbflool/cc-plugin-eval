@@ -24,6 +24,7 @@ import type { TestScenario } from "../../src/types/index.js";
 
 import {
   shouldRunE2E,
+  shouldRunE2EMcp,
   validateE2EEnvironment,
   createE2EConfig,
   isWithinE2EBudget,
@@ -31,6 +32,9 @@ import {
 
 // Skip all tests if E2E is not enabled
 const describeE2E = shouldRunE2E() ? describe : describe.skip;
+
+// Skip MCP tests unless explicitly enabled (slow due to server startup)
+const describeMcp = shouldRunE2EMcp() ? describe : describe.skip;
 
 // Track metrics across all tests for performance monitoring
 let totalE2ECost = 0;
@@ -983,4 +987,164 @@ describeE2E("E2E: Stage Isolation", () => {
       );
     }, 120000);
   });
+});
+
+// =============================================================================
+// Phase 3: MCP Server E2E Tests (Optional - requires RUN_E2E_MCP_TESTS=true)
+// =============================================================================
+
+/**
+ * MCP Server E2E Tests
+ *
+ * These tests validate MCP server integration with the pipeline.
+ * They are gated behind RUN_E2E_MCP_TESTS because:
+ * - MCP server connections add significant startup latency (5-10s)
+ * - External dependencies (npx, network) may cause flakiness
+ * - Detection logic is deterministic and tested in unit tests
+ *
+ * Run with: RUN_E2E_TESTS=true RUN_E2E_MCP_TESTS=true npm test
+ */
+describeMcp("E2E: MCP Server Pipeline", () => {
+  beforeAll(() => {
+    validateE2EEnvironment();
+  });
+
+  it("runs complete pipeline for MCP servers", async () => {
+    const config = createE2EConfig({
+      scope: { mcp_servers: true },
+      generation: { scenarios_per_component: 1 },
+      execution: {
+        max_turns: 3, // MCP tools may need extra turns
+        max_budget_usd: 0.1, // Higher budget for MCP overhead
+        timeout_ms: 120000, // Longer timeout for MCP server startup
+      },
+    });
+
+    // Stage 1: Analysis
+    const analysis = await runAnalysis(config);
+
+    // Gracefully skip if no MCP servers in fixture (more resilient than failing)
+    if (analysis.components.mcp_servers.length === 0) {
+      console.log("Skipping MCP pipeline test: no MCP servers in test plugin");
+      return;
+    }
+
+    // Log discovered MCP servers
+    console.log(
+      `\nMCP Servers discovered: ${analysis.components.mcp_servers.map((s) => s.name).join(", ")}`,
+    );
+
+    // Stage 2: Generation (deterministic for MCP - zero LLM cost)
+    const generation = await runGeneration(analysis, config);
+    expect(generation.scenarios.length).toBeGreaterThan(0);
+
+    // Verify MCP scenarios were generated
+    const mcpScenarios = generation.scenarios.filter(
+      (s) => s.component_type === "mcp_server",
+    );
+    expect(mcpScenarios.length).toBeGreaterThan(0);
+
+    console.log(`MCP scenarios generated: ${mcpScenarios.length}`);
+
+    // Stage 3: Execution
+    const execution = await runExecution(
+      analysis,
+      generation.scenarios,
+      config,
+      consoleProgress,
+    );
+
+    // Note: MCP tests don't share cost tracking with main E2E suite
+    // since they run in a separate describe block
+    expect(execution.results.length).toBeGreaterThan(0);
+
+    // Stage 4: Evaluation
+    const evaluation = await runEvaluation(
+      analysis.plugin_name,
+      generation.scenarios,
+      execution.results,
+      config,
+      consoleProgress,
+    );
+
+    // Verify evaluation completed
+    expect(evaluation.metrics).toBeDefined();
+    expect(evaluation.results.length).toBe(generation.scenarios.length);
+
+    // Check for MCP tool detections (pattern: mcp__<server>__<tool>)
+    const mcpDetections = execution.results.flatMap((r) =>
+      r.detected_tools.filter((t) => t.name.startsWith("mcp__")),
+    );
+
+    console.log(
+      `\nE2E MCP Pipeline Complete:` +
+        `\n  MCP servers: ${analysis.components.mcp_servers.length}` +
+        `\n  Scenarios: ${generation.scenarios.length}` +
+        `\n  MCP tool invocations: ${mcpDetections.length}` +
+        `\n  Accuracy: ${(evaluation.metrics.accuracy * 100).toFixed(1)}%` +
+        `\n  Cost: $${execution.total_cost_usd.toFixed(4)}`,
+    );
+  }, 300000); // 5 minute timeout for MCP tests
+
+  // NOTE: This test validates pipeline execution succeeds, not that MCP tools are invoked.
+  // MCP tool invocation is opportunistic - Claude decides whether to use MCP tools based
+  // on the prompt. The test passes regardless of invocation count, logging results for
+  // visibility. This is intentional to avoid flakiness from non-deterministic behavior.
+  it("detects MCP tool invocations via mcp__server__tool pattern", async () => {
+    const config = createE2EConfig({
+      scope: { mcp_servers: true },
+      generation: { scenarios_per_component: 1 },
+      execution: {
+        max_turns: 3,
+        max_budget_usd: 0.1,
+        timeout_ms: 120000,
+      },
+    });
+
+    // Run stages 1-3
+    const analysis = await runAnalysis(config);
+    const generation = await runGeneration(analysis, config);
+    const execution = await runExecution(
+      analysis,
+      generation.scenarios,
+      config,
+      consoleProgress,
+    );
+
+    // Analyze MCP tool usage across all results
+    const allMcpTools: string[] = [];
+    for (const result of execution.results) {
+      for (const tool of result.detected_tools) {
+        if (tool.name.startsWith("mcp__")) {
+          allMcpTools.push(tool.name);
+        }
+      }
+    }
+
+    // Log MCP tool usage for visibility
+    if (allMcpTools.length > 0) {
+      const uniqueTools = [...new Set(allMcpTools)];
+      console.log(
+        `\nE2E MCP Tool Detection:` +
+          `\n  Total MCP tool calls: ${allMcpTools.length}` +
+          `\n  Unique tools: ${uniqueTools.length}`,
+      );
+      for (const tool of uniqueTools.slice(0, 5)) {
+        // Parse tool name: mcp__<server>__<tool>
+        const parts = tool.split("__");
+        const server = parts[1] ?? "unknown";
+        const toolName = parts[2] ?? "unknown";
+        console.log(`    - ${server}: ${toolName}`);
+      }
+    } else {
+      console.log(
+        `\nE2E MCP Tool Detection:` +
+          `\n  No MCP tools invoked (Claude may not have needed MCP tools for the prompts)`,
+      );
+    }
+
+    // The test validates the pipeline runs without error
+    // MCP tool invocation depends on Claude's decision to use MCP tools
+    expect(execution.results.length).toBeGreaterThan(0);
+  }, 300000);
 });

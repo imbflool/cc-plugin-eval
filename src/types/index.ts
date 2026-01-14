@@ -6,6 +6,7 @@
 export type {
   PluginErrorType,
   McpServerStatus,
+  TimingBreakdown,
   PluginLoadDiagnostics,
   PluginLoadResult,
   PluginManifest,

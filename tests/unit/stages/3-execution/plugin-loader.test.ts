@@ -10,8 +10,18 @@ import {
   areMcpServersHealthy,
   getFailedMcpServers,
   formatPluginLoadResult,
+  verifyPluginLoad,
+  type QueryFunction,
 } from "../../../../src/stages/3-execution/plugin-loader.js";
-import type { PluginLoadResult } from "../../../../src/types/index.js";
+import type {
+  PluginLoadResult,
+  ExecutionConfig,
+} from "../../../../src/types/index.js";
+import type {
+  SDKMessage,
+  SDKSystemMessage,
+  QueryInput,
+} from "../../../../src/stages/3-execution/sdk-client.js";
 
 describe("getRecoveryHint", () => {
   it("should return hint for known error types", () => {
@@ -296,5 +306,174 @@ describe("formatPluginLoadResult", () => {
     expect(formatted).toContain("2 tools");
     expect(formatted).toContain("postgres");
     expect(formatted).toContain("failed");
+  });
+
+  it("should format result with timing breakdown", () => {
+    const result: PluginLoadResult = {
+      loaded: true,
+      plugin_name: "my-plugin",
+      plugin_path: "/path/to/plugin",
+      registered_tools: [],
+      registered_commands: [],
+      registered_skills: [],
+      registered_agents: [],
+      mcp_servers: [],
+      session_id: "session-abc",
+      diagnostics: {
+        manifest_found: true,
+        manifest_valid: true,
+        components_discovered: {
+          skills: 2,
+          agents: 1,
+          commands: 2,
+          hooks: false,
+          mcp_servers: 0,
+        },
+        load_duration_ms: 150,
+        timing_breakdown: {
+          time_to_first_message_ms: 50,
+          time_to_init_message_ms: 120,
+          total_query_time_ms: 150,
+        },
+      },
+    };
+
+    const formatted = formatPluginLoadResult(result);
+
+    expect(formatted).toContain("Timing breakdown:");
+    expect(formatted).toContain("First message: 50ms");
+    expect(formatted).toContain("Init message: 120ms");
+    expect(formatted).toContain("Total query: 150ms");
+  });
+});
+
+describe("verifyPluginLoad timing", () => {
+  const mockConfig: ExecutionConfig = {
+    model: "claude-sonnet-4-20250514",
+    session_strategy: "per_scenario",
+    allowed_tools: [],
+    disallowed_tools: [],
+    mcp_servers: {
+      skip_auth_required: true,
+      connection_timeout_ms: 5000,
+    },
+  };
+
+  /**
+   * Create a mock query function that yields messages with configurable delays.
+   */
+  function createMockQueryFn(
+    messages: SDKMessage[],
+    delays: number[] = [],
+  ): QueryFunction {
+    return (_input: QueryInput) => {
+      let index = 0;
+
+      return {
+        async *[Symbol.asyncIterator]() {
+          for (const message of messages) {
+            if (delays[index]) {
+              await new Promise((resolve) =>
+                setTimeout(resolve, delays[index]),
+              );
+            }
+            index++;
+            yield message;
+          }
+        },
+      };
+    };
+  }
+
+  it("should capture timing breakdown on successful load", async () => {
+    const initMessage: SDKSystemMessage = {
+      type: "system",
+      subtype: "init",
+      session_id: "test-session",
+      tools: [],
+      slash_commands: [],
+      plugins: [{ name: "test-plugin", path: "/path/to/plugin" }],
+      mcp_servers: [],
+    };
+
+    const mockQueryFn = createMockQueryFn([initMessage], [50]);
+
+    const result = await verifyPluginLoad({
+      pluginPath: "/path/to/plugin",
+      config: mockConfig,
+      queryFn: mockQueryFn,
+    });
+
+    expect(result.loaded).toBe(true);
+    expect(result.diagnostics).toBeDefined();
+    expect(result.diagnostics?.timing_breakdown).toBeDefined();
+    expect(
+      result.diagnostics?.timing_breakdown?.time_to_first_message_ms,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      result.diagnostics?.timing_breakdown?.time_to_init_message_ms,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      result.diagnostics?.timing_breakdown?.total_query_time_ms,
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it("should capture timing breakdown when init message comes after other messages", async () => {
+    const preInitMessage: SDKMessage = {
+      type: "assistant",
+      message: { role: "assistant", content: [] },
+    };
+
+    const initMessage: SDKSystemMessage = {
+      type: "system",
+      subtype: "init",
+      session_id: "test-session",
+      tools: [],
+      slash_commands: [],
+      plugins: [{ name: "test-plugin", path: "/path/to/plugin" }],
+      mcp_servers: [],
+    };
+
+    const mockQueryFn = createMockQueryFn(
+      [preInitMessage, initMessage],
+      [20, 30],
+    );
+
+    const result = await verifyPluginLoad({
+      pluginPath: "/path/to/plugin",
+      config: mockConfig,
+      queryFn: mockQueryFn,
+    });
+
+    expect(result.loaded).toBe(true);
+    expect(result.diagnostics?.timing_breakdown).toBeDefined();
+    // First message should arrive before init message
+    expect(
+      result.diagnostics!.timing_breakdown!.time_to_init_message_ms,
+    ).toBeGreaterThanOrEqual(
+      result.diagnostics!.timing_breakdown!.time_to_first_message_ms,
+    );
+  });
+
+  it("should capture timing breakdown on failed load", async () => {
+    const errorMessage: SDKMessage = {
+      type: "error",
+      error: "Plugin initialization failed",
+    };
+
+    const mockQueryFn = createMockQueryFn([errorMessage], [10]);
+
+    const result = await verifyPluginLoad({
+      pluginPath: "/path/to/plugin",
+      config: mockConfig,
+      queryFn: mockQueryFn,
+    });
+
+    expect(result.loaded).toBe(false);
+    expect(result.diagnostics).toBeDefined();
+    expect(result.diagnostics?.timing_breakdown).toBeDefined();
+    expect(
+      result.diagnostics?.timing_breakdown?.time_to_first_message_ms,
+    ).toBeGreaterThanOrEqual(0);
   });
 });

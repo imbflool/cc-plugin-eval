@@ -33,6 +33,18 @@ export interface McpServerStatus {
 }
 
 /**
+ * Timing breakdown for SDK operations.
+ */
+export interface TimingBreakdown {
+  /** Time from query start to first message */
+  time_to_first_message_ms: number;
+  /** Time from query start to init message */
+  time_to_init_message_ms: number;
+  /** Total query execution time */
+  total_query_time_ms: number;
+}
+
+/**
  * Diagnostic information about plugin loading.
  */
 export interface PluginLoadDiagnostics {
@@ -46,6 +58,8 @@ export interface PluginLoadDiagnostics {
     mcp_servers: number;
   };
   load_duration_ms: number;
+  /** Detailed timing breakdown for SDK operations */
+  timing_breakdown?: TimingBreakdown;
 }
 
 /**

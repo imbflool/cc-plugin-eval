@@ -23,6 +23,7 @@ import type {
   McpServerStatus,
   ExecutionConfig,
   PluginErrorType,
+  TimingBreakdown,
 } from "../../types/index.js";
 
 /**
@@ -115,6 +116,13 @@ export async function verifyPluginLoad(
   } = options;
   const startTime = Date.now();
 
+  // Initialize timing state
+  const timings: PluginLoadTimings = {
+    queryStart: startTime,
+    firstMessage: null,
+    initMessage: null,
+  };
+
   // Create abort controller for timeout
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -147,9 +155,13 @@ export async function verifyPluginLoad(
 
     // Iterate through messages looking for init
     for await (const message of q) {
+      // Track first message timing
+      timings.firstMessage ??= Date.now();
+
       // Check for init message
       if (isSystemMessage(message) && message.subtype === "init") {
-        return processInitMessage(message, pluginPath, startTime);
+        timings.initMessage = Date.now();
+        return processInitMessage(message, pluginPath, timings);
       }
 
       // Check for error messages during init
@@ -158,7 +170,7 @@ export async function verifyPluginLoad(
           pluginPath,
           `Plugin initialization error: ${message.error ?? "Unknown error"}`,
           "unknown",
-          startTime,
+          timings,
         );
       }
     }
@@ -168,7 +180,7 @@ export async function verifyPluginLoad(
       pluginPath,
       "No system init message received - plugin may have failed silently",
       "unknown",
-      startTime,
+      timings,
     );
   } catch (err) {
     const isTimeout = err instanceof Error && err.name === "AbortError";
@@ -177,10 +189,39 @@ export async function verifyPluginLoad(
       ? `Plugin load timed out after ${String(timeoutMs / 1000)} seconds`
       : `Plugin load failed: ${err instanceof Error ? err.message : String(err)}`;
 
-    return createFailedResult(pluginPath, errorMessage, errorType, startTime);
+    return createFailedResult(pluginPath, errorMessage, errorType, timings);
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Internal timing state for tracking SDK operation phases.
+ */
+interface PluginLoadTimings {
+  queryStart: number;
+  firstMessage: number | null;
+  initMessage: number | null;
+}
+
+/**
+ * Create timing breakdown from timing state.
+ */
+function createTimingBreakdown(
+  timings: PluginLoadTimings,
+  queryComplete: number,
+): TimingBreakdown {
+  return {
+    time_to_first_message_ms:
+      timings.firstMessage !== null
+        ? timings.firstMessage - timings.queryStart
+        : queryComplete - timings.queryStart,
+    time_to_init_message_ms:
+      timings.initMessage !== null
+        ? timings.initMessage - timings.queryStart
+        : queryComplete - timings.queryStart,
+    total_query_time_ms: queryComplete - timings.queryStart,
+  };
 }
 
 /**
@@ -189,7 +230,7 @@ export async function verifyPluginLoad(
 function processInitMessage(
   initMsg: SDKSystemMessage,
   pluginPath: string,
-  startTime: number,
+  timings: PluginLoadTimings,
 ): PluginLoadResult {
   // Check if our plugin is in the loaded plugins array
   const loadedPlugins = initMsg.plugins ?? [];
@@ -202,7 +243,7 @@ function processInitMessage(
       pluginPath,
       `Plugin not found in loaded plugins. Expected path: ${pluginPath}`,
       "manifest_not_found",
-      startTime,
+      timings,
     );
   }
 
@@ -232,6 +273,7 @@ function processInitMessage(
   );
 
   // Build diagnostics
+  const queryComplete = Date.now();
   const diagnostics: PluginLoadDiagnostics = {
     manifest_found: true,
     manifest_valid: true,
@@ -242,7 +284,8 @@ function processInitMessage(
       hooks: false,
       mcp_servers: mcpServers.length,
     },
-    load_duration_ms: Date.now() - startTime,
+    load_duration_ms: queryComplete - timings.queryStart,
+    timing_breakdown: createTimingBreakdown(timings, queryComplete),
   };
 
   return {
@@ -268,8 +311,9 @@ function createFailedResult(
   pluginPath: string,
   error: string,
   errorType: PluginErrorType,
-  startTime: number,
+  timings: PluginLoadTimings,
 ): PluginLoadResult {
+  const queryComplete = Date.now();
   return {
     loaded: false,
     plugin_name: null,
@@ -293,7 +337,8 @@ function createFailedResult(
         hooks: false,
         mcp_servers: 0,
       },
-      load_duration_ms: Date.now() - startTime,
+      load_duration_ms: queryComplete - timings.queryStart,
+      timing_breakdown: createTimingBreakdown(timings, queryComplete),
     },
   };
 }
@@ -364,6 +409,15 @@ export function formatPluginLoadResult(result: PluginLoadResult): string {
       lines.push(
         `  Load time: ${String(result.diagnostics.load_duration_ms)}ms`,
       );
+      if (result.diagnostics.timing_breakdown) {
+        const tb = result.diagnostics.timing_breakdown;
+        lines.push(`  Timing breakdown:`);
+        lines.push(
+          `    First message: ${String(tb.time_to_first_message_ms)}ms`,
+        );
+        lines.push(`    Init message: ${String(tb.time_to_init_message_ms)}ms`);
+        lines.push(`    Total query: ${String(tb.total_query_time_ms)}ms`);
+      }
     }
   } else {
     lines.push(`Plugin failed to load: ${result.plugin_path}`);

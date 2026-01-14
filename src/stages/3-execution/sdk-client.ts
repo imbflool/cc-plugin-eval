@@ -7,27 +7,22 @@
 
 import {
   query,
-  unstable_v2_createSession,
   type HookCallback as SDKHookCallback,
   type HookCallbackMatcher,
   type PreToolUseHookInput as SDKPreToolUseHookInput,
   type PermissionMode,
   type SettingSource,
   type SDKUserMessage as SDKUserMessageType,
-  type SDKSession as SDKSessionType,
-  type SDKSessionOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 
 // Re-export types for use in other modules
 export type { PermissionMode, SettingSource };
 
 // Re-export the query function for use throughout Stage 3
-export { query, unstable_v2_createSession };
+export { query };
 
 // Re-export SDK types
 export type SDKUserMessage = SDKUserMessageType;
-export type SDKSession = SDKSessionType;
-export type { SDKSessionOptions };
 
 // Re-export types from the SDK
 // Note: The SDK may not export all types, so we define compatible interfaces

@@ -28,6 +28,7 @@ import {
   validateE2EEnvironment,
   createE2EConfig,
   isWithinE2EBudget,
+  isWithinPerTestBudget,
 } from "./helpers.js";
 
 // Skip all tests if E2E is not enabled
@@ -36,10 +37,22 @@ const describeE2E = shouldRunE2E() ? describe : describe.skip;
 // Skip MCP tests unless explicitly enabled (slow due to server startup)
 const describeMcp = shouldRunE2EMcp() ? describe : describe.skip;
 
-// Track metrics across all tests for performance monitoring
+// Track metrics across all tests for performance monitoring and reporting.
+// NOTE: These module-level variables are append-only and used for aggregate
+// reporting in afterAll. Individual test budget validation uses per-test cost
+// assertions (isWithinPerTestBudget) to avoid order-dependent test failures.
 let totalE2ECost = 0;
 let e2eStartTime = 0;
 let e2eTestCount = 0;
+
+// Module-level afterAll ensures total budget validation runs regardless of
+// which test suites are executed (e.g., when running tests with --grep filter)
+afterAll(() => {
+  // Only validate if tests actually ran and incurred costs
+  if (e2eTestCount > 0) {
+    expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+  }
+});
 
 describeE2E("E2E: Full Pipeline Integration", () => {
   beforeAll(() => {
@@ -173,7 +186,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
       // Track cost and test count
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
-      expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       // Verify execution results
       expect(execution.results.length).toBe(generation.scenarios.length);
@@ -224,7 +237,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
 
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
-      expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       expect(execution.results.length).toBeGreaterThan(0);
 
@@ -263,7 +276,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
       // Track cost and test count
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
-      expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       // Verify execution results
       expect(execution.results.length).toBe(generation.scenarios.length);
@@ -317,7 +330,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
 
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
-      expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       // Stage 4: Evaluation
       const evaluation = await runEvaluation(
@@ -375,7 +388,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
 
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
-      expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       const evaluation = await runEvaluation(
         analysis.plugin_name,
@@ -426,7 +439,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
 
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
-      expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       // Stage 4: Evaluation
       const evaluation = await runEvaluation(
@@ -511,7 +524,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
 
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
-      expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       // Stage 4: Evaluate
       const evaluation = await runEvaluation(
@@ -592,7 +605,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
 
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
-      expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       // Stage 4: Evaluate
       const evaluation = await runEvaluation(
@@ -671,7 +684,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
 
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
-      expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       // Stage 4: Evaluation
       const evaluation = await runEvaluation(
@@ -723,6 +736,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
 
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       // Check if any hook responses were captured
       // Note: Hook response capture depends on which hooks fire during execution
@@ -792,6 +806,7 @@ describeE2E("E2E: Full Pipeline Integration", () => {
 
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       // Verify actual cost is within reasonable range of estimate
       // Allow 3x variance since estimates are conservative
@@ -918,6 +933,7 @@ describeE2E("E2E: Stage Isolation", () => {
 
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       const evaluation = await runEvaluation(
         analysis.plugin_name,
@@ -973,7 +989,7 @@ describeE2E("E2E: Stage Isolation", () => {
 
       totalE2ECost += execution.total_cost_usd;
       e2eTestCount++;
-      expect(isWithinE2EBudget(totalE2ECost)).toBe(true);
+      expect(isWithinPerTestBudget(execution.total_cost_usd)).toBe(true);
 
       // Verify isolated mode execution completed successfully
       expect(execution.results.length).toBe(generation.scenarios.length);

@@ -278,6 +278,18 @@ export function isWithinE2EBudget(costUsd: number): boolean {
   return costUsd <= E2E_MAX_COST_USD;
 }
 
+/**
+ * Check if a single test's cost is within per-test budget.
+ * Uses E2E_DEFAULT_BUDGET_USD (0.5) to validate individual test costs,
+ * ensuring each test remains reasonable regardless of execution order.
+ *
+ * @param costUsd - Individual test cost in USD
+ * @returns True if within per-test budget
+ */
+export function isWithinPerTestBudget(costUsd: number): boolean {
+  return costUsd <= E2E_DEFAULT_BUDGET_USD;
+}
+
 // =============================================================================
 // Result Validation Helpers
 // =============================================================================

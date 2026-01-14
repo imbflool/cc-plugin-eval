@@ -7,6 +7,7 @@
  */
 
 import { DEFAULT_TUNING } from "../../config/defaults.js";
+import { logger } from "../../utils/logging.js";
 
 import {
   executeQuery,
@@ -142,9 +143,8 @@ export async function verifyPluginLoad(
         abortSignal: controller.signal,
         stderr: (data: string): void => {
           const elapsed = Date.now() - startTime;
-          console.error(
-            `[Plugin Load ${String(elapsed)}ms] SDK stderr:`,
-            data.trim(),
+          logger.debug(
+            `[Plugin Load ${String(elapsed)}ms] SDK stderr: ${data.trim()}`,
           );
         },
       },

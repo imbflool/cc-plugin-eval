@@ -128,9 +128,8 @@ function buildQueryInput(
       },
       stderr: (data: string): void => {
         const elapsed = Date.now() - startTime;
-        console.error(
-          `[Scenario ${scenario.id} ${String(elapsed)}ms] SDK stderr:`,
-          data.trim(),
+        logger.debug(
+          `[Scenario ${scenario.id} ${String(elapsed)}ms] SDK stderr: ${data.trim()}`,
         );
       },
     },

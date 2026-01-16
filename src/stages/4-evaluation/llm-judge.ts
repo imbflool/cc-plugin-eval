@@ -376,6 +376,7 @@ export async function evaluateWithLLMJudge(
       {
         model: resolveModelId(config.model),
         max_tokens: config.max_tokens,
+        temperature: config.temperature,
         system: [
           {
             type: "text",
@@ -501,6 +502,7 @@ async function evaluateWithJsonFallback(
       {
         model: resolveModelId(config.model),
         max_tokens: config.max_tokens,
+        temperature: config.temperature,
         system: [
           {
             type: "text",

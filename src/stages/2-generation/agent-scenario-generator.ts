@@ -212,6 +212,7 @@ export async function generateAgentScenarios(
       {
         model: resolveModelId(config.model),
         max_tokens: config.max_tokens,
+        temperature: config.temperature,
         system: [
           {
             type: "text",

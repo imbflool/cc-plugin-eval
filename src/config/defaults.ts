@@ -26,6 +26,7 @@ export const DEFAULT_GENERATION = {
   reasoning_effort: "medium" as const,
   semantic_variations: true,
   api_timeout_ms: 60000,
+  temperature: 0.3,
 };
 
 /**
@@ -54,6 +55,7 @@ export const DEFAULT_EVALUATION = {
   aggregate_method: "average" as const,
   include_citations: true,
   api_timeout_ms: 120000,
+  temperature: 0.1,
 };
 
 /**

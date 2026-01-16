@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   EvalConfigSchema,
+  EvaluationConfigSchema,
   GenerationConfigSchema,
   ScopeConfigSchema,
 } from "../../../src/config/schema.js";
@@ -36,6 +37,7 @@ describe("GenerationConfigSchema", () => {
     expect(result.scenarios_per_component).toBe(5);
     expect(result.diversity).toBe(0.7);
     expect(result.reasoning_effort).toBe("medium");
+    expect(result.temperature).toBe(0.3);
   });
 
   it("validates scenarios_per_component range", () => {
@@ -65,6 +67,40 @@ describe("GenerationConfigSchema", () => {
 
     const valid = GenerationConfigSchema.parse({ reasoning_effort: "high" });
     expect(valid.reasoning_effort).toBe("high");
+  });
+
+  it("validates temperature range", () => {
+    expect(() => GenerationConfigSchema.parse({ temperature: -0.1 })).toThrow();
+    expect(() => GenerationConfigSchema.parse({ temperature: 1.5 })).toThrow();
+
+    const valid = GenerationConfigSchema.parse({ temperature: 0.0 });
+    expect(valid.temperature).toBe(0.0);
+
+    const validMax = GenerationConfigSchema.parse({ temperature: 1.0 });
+    expect(validMax.temperature).toBe(1.0);
+  });
+});
+
+describe("EvaluationConfigSchema", () => {
+  it("applies default values", () => {
+    const result = EvaluationConfigSchema.parse({});
+
+    expect(result.model).toBe("claude-haiku-4-5-20251001");
+    expect(result.max_tokens).toBe(4000);
+    expect(result.detection_mode).toBe("programmatic_first");
+    expect(result.reasoning_effort).toBe("low");
+    expect(result.temperature).toBe(0.1);
+  });
+
+  it("validates temperature range", () => {
+    expect(() => EvaluationConfigSchema.parse({ temperature: -0.1 })).toThrow();
+    expect(() => EvaluationConfigSchema.parse({ temperature: 1.5 })).toThrow();
+
+    const valid = EvaluationConfigSchema.parse({ temperature: 0.0 });
+    expect(valid.temperature).toBe(0.0);
+
+    const validMax = EvaluationConfigSchema.parse({ temperature: 1.0 });
+    expect(validMax.temperature).toBe(1.0);
   });
 });
 

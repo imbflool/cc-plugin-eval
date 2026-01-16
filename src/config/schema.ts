@@ -128,6 +128,8 @@ export const GenerationConfigSchema = z.object({
   requests_per_second: z.number().min(0.1).max(100).nullish(),
   /** SDK timeout for generation API calls (default 60s) */
   api_timeout_ms: z.number().int().min(5000).max(300000).default(60000),
+  /** Temperature for LLM calls (0.0-1.0). Lower = more deterministic. Default 0.3. */
+  temperature: z.number().min(0).max(1).default(0.3),
 });
 
 /**
@@ -180,6 +182,8 @@ export const EvaluationConfigSchema = z.object({
   include_citations: z.boolean().default(true),
   /** SDK timeout for evaluation API calls (default 120s for complex reasoning) */
   api_timeout_ms: z.number().int().min(5000).max(300000).default(120000),
+  /** Temperature for LLM judge calls (0.0-1.0). Lower = more consistent judging. Default 0.1. */
+  temperature: z.number().min(0).max(1).default(0.1),
 });
 
 /**

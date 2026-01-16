@@ -64,6 +64,8 @@ export interface GenerationConfig {
   requests_per_second?: number | null;
   /** SDK timeout for generation API calls (default 60s) */
   api_timeout_ms: number;
+  /** Temperature for LLM calls (0.0-1.0). Lower = more deterministic. Default 0.3. */
+  temperature: number;
 }
 
 /**
@@ -132,6 +134,8 @@ export interface EvaluationConfig {
   include_citations: boolean;
   /** SDK timeout for evaluation API calls (default 120s for complex reasoning) */
   api_timeout_ms: number;
+  /** Temperature for LLM judge calls (0.0-1.0). Lower = more consistent judging. Default 0.1. */
+  temperature: number;
 }
 
 /**

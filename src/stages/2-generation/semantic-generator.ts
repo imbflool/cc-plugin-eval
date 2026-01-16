@@ -74,6 +74,7 @@ const COMPONENT_TYPES = [
  * @param triggerPhrase - Original trigger phrase
  * @param model - Model to use
  * @param timeout - Optional per-request timeout in milliseconds (default: 60000)
+ * @param temperature - Optional temperature for LLM calls (default: 0.5)
  * @returns Array of semantic variations
  */
 export async function generateSemanticVariations(
@@ -81,6 +82,7 @@ export async function generateSemanticVariations(
   triggerPhrase: string,
   model: string,
   timeout?: number,
+  temperature?: number,
 ): Promise<SemanticVariation[]> {
   try {
     const response = await withRetry(async () => {
@@ -88,6 +90,7 @@ export async function generateSemanticVariations(
         {
           model: resolveModelId(model),
           max_tokens: DEFAULT_TUNING.token_estimates.semantic_gen_max_tokens,
+          temperature: temperature ?? 0.5,
           system: [
             {
               type: "text",
@@ -277,6 +280,7 @@ export function generateSemanticScenarios(
  * @param model - Model to use
  * @param allComponentKeywords - Keywords for filtering
  * @param timeout - Optional per-request timeout in milliseconds
+ * @param temperature - Optional temperature for LLM calls (default: 0.5)
  * @returns Array of test scenarios
  */
 export async function generateSkillSemanticScenarios(
@@ -285,6 +289,7 @@ export async function generateSkillSemanticScenarios(
   model: string,
   allComponentKeywords: string[],
   timeout?: number,
+  temperature?: number,
 ): Promise<TestScenario[]> {
   const allVariations: SemanticVariation[] = [];
 
@@ -294,6 +299,7 @@ export async function generateSkillSemanticScenarios(
       phrase,
       model,
       timeout,
+      temperature,
     );
 
     // Filter out variations that might trigger different components
@@ -322,6 +328,8 @@ export interface SemanticGenerationOptions {
   maxConcurrent?: number;
   /** SDK timeout for API calls in milliseconds (defaults to 60000) */
   apiTimeoutMs?: number;
+  /** Temperature for LLM calls (0.0-1.0). Higher = more diverse variations. Default 0.5. */
+  temperature?: number;
 }
 
 /**
@@ -348,6 +356,7 @@ export async function generateAllSemanticScenarios(
   const allComponentKeywords = extractAllComponentKeywords(analysis);
   const maxConcurrent = options?.maxConcurrent ?? 10;
   const apiTimeout = options?.apiTimeoutMs;
+  const temperature = options?.temperature;
 
   // Create rate limiter if configured
   const rps = options?.requestsPerSecond;
@@ -370,6 +379,7 @@ export async function generateAllSemanticScenarios(
           model,
           allComponentKeywords,
           apiTimeout,
+          temperature,
         );
 
       return rateLimiter ? rateLimiter(generateFn) : generateFn();

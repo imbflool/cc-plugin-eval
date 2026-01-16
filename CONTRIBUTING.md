@@ -179,10 +179,12 @@ chore: update dependencies
 
 **Programmatic detection is primary** (100% confidence):
 
-1. Tool capture hooks (PreToolUse, SubagentStart/SubagentStop) capture invocations during execution
-2. Parse `Skill`, `Task`, `SlashCommand` tool calls from captures
-3. Agent detection uses SubagentStart/SubagentStop hooks for improved accuracy
-4. LLM judge is secondary, used only for quality assessment
+1. Tool capture hooks capture invocations during execution:
+   - `PreToolUse` / `PostToolUse` for `Skill`, `Task`, `SlashCommand` tool calls
+   - `SubagentStart` / `SubagentStop` for agent detection
+   - `SDKHookResponseMessage` for hook detection
+   - MCP tools via pattern: `mcp__<server>__<tool>`
+2. LLM judge is secondary, used only for quality assessment
 
 ### SDK Integration
 

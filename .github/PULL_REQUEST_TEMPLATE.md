@@ -146,7 +146,11 @@ Fixes # (issue)
 <details>
 <summary><strong>Stage 4: Evaluation</strong> (click to expand)</summary>
 
-- [ ] Programmatic detection correctly parses Skill/Task/SlashCommand tool calls
+- [ ] Programmatic detection correctly parses tool captures:
+  - Skill/Task/SlashCommand via PreToolUse/PostToolUse hooks
+  - Agents via SubagentStart/SubagentStop hooks
+  - Hooks via SDKHookResponseMessage events
+  - MCP tools via `mcp__<server>__<tool>` pattern
 - [ ] LLM judge fallback works for edge cases
 - [ ] Conflict detection identifies overlapping triggers
 - [ ] Result aggregation methods work correctly

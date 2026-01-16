@@ -157,8 +157,11 @@ cc-plugin-eval report -r <run-id> --output junit-xml
 | `-p, --plugin <path>` | Plugin directory path                             |
 | `-c, --config <path>` | Config file (default: `config.yaml`)              |
 | `--dry-run`           | Generate scenarios without execution              |
+| `--estimate`          | Show cost estimate before execution               |
 | `--verbose`           | Enable debug output                               |
 | `--fast`              | Only run previously failed scenarios              |
+| `--no-batch`          | Force synchronous (non-batch) execution           |
+| `--rewind`            | Undo file changes after each scenario             |
 | `--semantic`          | Enable semantic variation testing                 |
 | `--samples <n>`       | Multi-sample judgment count                       |
 | `--reps <n>`          | Repetitions per scenario                          |
@@ -371,12 +374,14 @@ src/
 ├── index.ts              # CLI entry point (requires env.ts first import)
 ├── env.ts                # Environment setup (dotenv loading)
 ├── config/               # Configuration loading & validation
+│   ├── index.ts          # Config exports
 │   ├── loader.ts         # YAML/JSON config loading with Zod
 │   ├── schema.ts         # Zod validation schemas
 │   ├── defaults.ts       # Default configuration values
 │   └── pricing.ts        # Model pricing for cost estimation
 ├── stages/
 │   ├── 1-analysis/       # Plugin parsing, trigger extraction
+│   │   ├── index.ts      # runAnalysis() entry point
 │   │   ├── agent-analyzer.ts
 │   │   ├── command-analyzer.ts
 │   │   ├── hook-analyzer.ts
@@ -386,6 +391,7 @@ src/
 │   │   ├── preflight.ts
 │   │   └── skill-analyzer.ts
 │   ├── 2-generation/     # Scenario generation
+│   │   ├── index.ts      # runGeneration() entry point
 │   │   ├── agent-scenario-generator.ts
 │   │   ├── batch-calculator.ts
 │   │   ├── command-scenario-generator.ts
@@ -395,6 +401,7 @@ src/
 │   │   ├── mcp-scenario-generator.ts
 │   │   └── skill-scenario-generator.ts
 │   ├── 3-execution/      # Agent SDK integration
+│   │   ├── index.ts      # runExecution() entry point
 │   │   ├── agent-executor.ts
 │   │   ├── hook-capture.ts
 │   │   ├── plugin-loader.ts
@@ -404,6 +411,7 @@ src/
 │   │   ├── tool-capture-hooks.ts
 │   │   └── transcript-builder.ts
 │   └── 4-evaluation/     # Detection & metrics
+│       ├── index.ts      # runEvaluation() entry point
 │       ├── batch-evaluator.ts
 │       ├── conflict-tracker.ts
 │       ├── llm-judge.ts
@@ -414,6 +422,7 @@ src/
 │   └── state-manager.ts
 ├── types/                # TypeScript interfaces
 └── utils/                # Retry, concurrency, logging
+    ├── index.ts
     ├── retry.ts
     ├── concurrency.ts
     ├── sanitizer.ts

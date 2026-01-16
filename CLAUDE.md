@@ -111,6 +111,46 @@ This project has MCP tools configured for efficient code exploration and editing
 
 **Adding a new component type**: Follow the type through all four stages using `find_referencing_symbols` on similar component types (e.g., trace how `hooks` is handled to understand where to add `mcp_servers`).
 
+### Serena MCP Best Practices
+
+**Symbol-First Philosophy**: Never read entire source files when you can use symbolic tools. Use `get_symbols_overview` to understand file structure, then `find_symbol` with `include_body=true` only for the specific symbols you need.
+
+**Name Path Patterns**: Serena uses hierarchical name paths like `ClassName/methodName`. Examples:
+
+- `runEvaluation` - Matches any symbol named `runEvaluation`
+- `ProgrammaticDetector/detectFromCaptures` - Matches method in class
+- `/ClassName/method` - Absolute path (exact match required)
+- Use `substring_matching=true` for partial matches: `detect` finds `detectFromCaptures`, `detectAllComponents`
+
+**Key Parameters**:
+
+| Parameter                       | Use Case                                               |
+| ------------------------------- | ------------------------------------------------------ |
+| `depth=1`                       | Get class methods: `find_symbol("ClassName", depth=1)` |
+| `include_body=true`             | Get actual code (use sparingly)                        |
+| `relative_path`                 | Restrict search scope for speed                        |
+| `restrict_search_to_code_files` | In `search_for_pattern`, limits to TypeScript files    |
+
+**Non-Code File Search**: Use `search_for_pattern` (not `find_symbol`) for YAML, JSON, markdown:
+
+```text
+search_for_pattern("pattern", paths_include_glob="*.json")
+```
+
+**Serena Memories**: This project has pre-built memories in `.serena/memories/`. Read relevant ones before major changes:
+
+| Memory                   | When to Read                                          |
+| ------------------------ | ----------------------------------------------------- |
+| `architecture_decisions` | Before changing detection logic or pipeline structure |
+| `testing_patterns`       | Before writing tests                                  |
+| `code_style`             | Before writing new code                               |
+
+**Thinking Tools**: Use Serena's thinking tools at key points:
+
+- `think_about_collected_information` - After searching, before acting
+- `think_about_task_adherence` - Before making edits
+- `think_about_whether_you_are_done` - Before completing a task
+
 ## Directory Structure
 
 ```text

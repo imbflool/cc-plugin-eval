@@ -425,5 +425,64 @@ describe("session-batching", () => {
       expect(results[0]?.errors).toHaveLength(1);
       expect(results[0]?.errors[0]?.error_type).toBe("timeout");
     });
+
+    it("captures subagent spawns via SubagentStart/SubagentStop hooks", async () => {
+      const scenarios = [
+        createBatchScenario("agent-scenario", "agent:test-agent"),
+      ];
+
+      const mockQuery = createMockQueryFn({
+        triggeredTools: [{ name: "Task", input: { subagent_type: "Explore" } }],
+        subagentSpawns: [
+          { agentId: "agent-123", agentType: "Explore" },
+          { agentId: "agent-456", agentType: "Plan" },
+        ],
+      });
+
+      const results = await executeBatch({
+        scenarios,
+        pluginPath: "/path/to/plugin",
+        pluginName: "test-plugin",
+        config: createMockExecutionConfig(),
+        queryFn: mockQuery,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.subagent_captures).toBeDefined();
+      expect(results[0]?.subagent_captures).toHaveLength(2);
+
+      // Verify captures have correct structure
+      const captures = results[0]?.subagent_captures ?? [];
+      expect(captures[0]?.agentId).toBe("agent-123");
+      expect(captures[0]?.agentType).toBe("Explore");
+      expect(captures[0]?.startTimestamp).toBeDefined();
+      expect(captures[0]?.stopTimestamp).toBeDefined();
+
+      expect(captures[1]?.agentId).toBe("agent-456");
+      expect(captures[1]?.agentType).toBe("Plan");
+    });
+
+    it("returns empty subagent_captures when no agents are spawned", async () => {
+      const scenarios = [
+        createBatchScenario("no-agent-scenario", "skill:test"),
+      ];
+
+      const mockQuery = createMockQueryFn({
+        triggeredTools: [{ name: "Skill", input: { skill: "test" } }],
+        // No subagentSpawns
+      });
+
+      const results = await executeBatch({
+        scenarios,
+        pluginPath: "/path/to/plugin",
+        pluginName: "test-plugin",
+        config: createMockExecutionConfig(),
+        queryFn: mockQuery,
+      });
+
+      expect(results).toHaveLength(1);
+      // When no subagents are spawned, subagent_captures should not be included
+      expect(results[0]?.subagent_captures).toBeUndefined();
+    });
   });
 });

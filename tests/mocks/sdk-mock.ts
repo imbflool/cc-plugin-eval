@@ -20,6 +20,8 @@ import type {
   QueryObject,
   QueryInput,
   PreToolUseHookConfig,
+  SubagentStartHookConfig,
+  SubagentStopHookConfig,
 } from "../../src/stages/3-execution/sdk-client.js";
 import type { ToolCapture, ExecutionConfig } from "../../src/types/index.js";
 
@@ -33,11 +35,22 @@ export interface MockToolCall {
 }
 
 /**
+ * Subagent spawn configuration for mock responses.
+ */
+export interface MockSubagentSpawn {
+  agentId: string;
+  agentType: string;
+}
+
+/**
  * Configuration for creating mock query functions.
  */
 export interface MockQueryConfig {
   /** Tool calls to simulate in assistant response */
   triggeredTools?: MockToolCall[];
+
+  /** Subagent spawns to simulate (triggers SubagentStart/SubagentStop hooks) */
+  subagentSpawns?: MockSubagentSpawn[];
 
   /** Error message to simulate (makes execution fail) */
   errorMessage?: string;
@@ -145,6 +158,10 @@ export function createMockQueryFn(config: MockQueryConfig = {}): QueryFunction {
     // Extract hooks for calling during tool use
     const preToolUseHooks: PreToolUseHookConfig[] =
       input.options?.hooks?.PreToolUse ?? [];
+    const subagentStartHooks: SubagentStartHookConfig[] =
+      input.options?.hooks?.SubagentStart ?? [];
+    const subagentStopHooks: SubagentStopHookConfig[] =
+      input.options?.hooks?.SubagentStop ?? [];
 
     // Build tool calls with IDs
     const toolCalls =
@@ -260,6 +277,46 @@ export function createMockQueryFn(config: MockQueryConfig = {}): QueryFunction {
       }
     };
 
+    // Helper to call SubagentStart hooks for an agent
+    const callSubagentStartHooks = async (
+      agentId: string,
+      agentType: string,
+    ) => {
+      for (const hookConfig of subagentStartHooks) {
+        const matcher = new RegExp(hookConfig.matcher);
+        if (matcher.test(agentType)) {
+          for (const hook of hookConfig.hooks) {
+            await hook(
+              { agent_id: agentId, agent_type: agentType },
+              `subagent-start-${agentId}`,
+              {
+                signal:
+                  input.options?.abortController?.signal ??
+                  new AbortController().signal,
+              },
+            );
+          }
+        }
+      }
+    };
+
+    // Helper to call SubagentStop hooks for an agent
+    const callSubagentStopHooks = async (agentId: string) => {
+      for (const hookConfig of subagentStopHooks) {
+        const matcher = new RegExp(hookConfig.matcher);
+        // SubagentStop matcher typically matches on agent_id
+        if (matcher.test(agentId) || hookConfig.matcher === ".*") {
+          for (const hook of hookConfig.hooks) {
+            await hook({ agent_id: agentId }, `subagent-stop-${agentId}`, {
+              signal:
+                input.options?.abortController?.signal ??
+                new AbortController().signal,
+            });
+          }
+        }
+      }
+    };
+
     // Create QueryObject with async iterator
     const queryObject: QueryObject = {
       [Symbol.asyncIterator]: async function* () {
@@ -282,6 +339,14 @@ export function createMockQueryFn(config: MockQueryConfig = {}): QueryFunction {
                 toolCall.input,
                 toolCall.id,
               );
+            }
+
+            // Simulate subagent spawns (both start and stop)
+            if (config.subagentSpawns) {
+              for (const spawn of config.subagentSpawns) {
+                await callSubagentStartHooks(spawn.agentId, spawn.agentType);
+                await callSubagentStopHooks(spawn.agentId);
+              }
             }
           }
 

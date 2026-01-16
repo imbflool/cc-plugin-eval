@@ -22,6 +22,8 @@ import {
   createPreToolUseHook,
   createPostToolUseHook,
   createPostToolUseFailureHook,
+  createSubagentStartHook,
+  createSubagentStopHook,
 } from "./tool-capture-hooks.js";
 import {
   buildTranscript,
@@ -34,6 +36,7 @@ import type {
   ExecutionResult,
   HookResponseCapture,
   SessionStrategy,
+  SubagentCapture,
   TestScenario,
   ToolCapture,
   TranscriptErrorEvent,
@@ -164,6 +167,10 @@ interface BuildScenarioQueryInputOptions {
   captureMap: Map<string, ToolCapture>;
   /** Tool capture callback */
   onToolCapture: (capture: ToolCapture) => void;
+  /** Map for correlating SubagentStart/SubagentStop hooks by agentId */
+  subagentCaptureMap: Map<string, SubagentCapture>;
+  /** Subagent capture callback */
+  onSubagentCapture: (capture: SubagentCapture) => void;
   /** Stderr handler */
   onStderr: (data: string) => void;
   /** Enable file checkpointing for rewind support */
@@ -212,6 +219,8 @@ interface ExecuteScenarioWithRetryResult {
   detectedTools: ToolCapture[];
   /** Hook responses collected */
   hookResponses: HookResponseCapture[];
+  /** Subagent captures from SubagentStart/SubagentStop hooks */
+  subagentCaptures: SubagentCapture[];
   /** Errors encountered */
   errors: TranscriptErrorEvent[];
   /** User message ID for file checkpointing */
@@ -248,11 +257,15 @@ async function executeScenarioWithRetry(
   const scenarioMessages: SDKMessage[] = [];
   const scenarioErrors: TranscriptErrorEvent[] = [];
   const detectedTools: ToolCapture[] = [];
+  const subagentCaptures: SubagentCapture[] = [];
   const hookCollector = createHookResponseCollector();
   let userMessageId: string | undefined;
 
   // Create capture map for correlating Pre/Post hooks by toolUseId
   const captureMap = new Map<string, ToolCapture>();
+
+  // Create capture map for correlating SubagentStart/SubagentStop hooks by agentId
+  const subagentCaptureMap = new Map<string, SubagentCapture>();
 
   logger.debug(
     `Batch: executing scenario ${String(scenarioIndex + 1)}/${String(totalScenarios)}: ${scenario.id}`,
@@ -271,6 +284,8 @@ async function executeScenarioWithRetry(
     abortController: controller,
     captureMap,
     onToolCapture: (capture) => detectedTools.push(capture),
+    subagentCaptureMap,
+    onSubagentCapture: (capture) => subagentCaptures.push(capture),
     onStderr: (data) => {
       const elapsed = Date.now() - startTime;
       console.error(
@@ -334,6 +349,7 @@ async function executeScenarioWithRetry(
     messages: scenarioMessages,
     detectedTools,
     hookResponses: hookCollector.responses,
+    subagentCaptures,
     errors: scenarioErrors,
     userMessageId,
   };
@@ -360,6 +376,8 @@ function buildScenarioQueryInput(
     abortController,
     captureMap,
     onToolCapture,
+    subagentCaptureMap,
+    onSubagentCapture,
     onStderr,
     enableFileCheckpointing,
     enableMcpDiscovery = true,
@@ -401,6 +419,20 @@ function buildScenarioQueryInput(
           {
             matcher: ".*",
             hooks: [createPostToolUseFailureHook(captureMap)],
+          },
+        ],
+        SubagentStart: [
+          {
+            matcher: ".*",
+            hooks: [
+              createSubagentStartHook(subagentCaptureMap, onSubagentCapture),
+            ],
+          },
+        ],
+        SubagentStop: [
+          {
+            matcher: ".*",
+            hooks: [createSubagentStopHook(subagentCaptureMap)],
           },
         ],
       },
@@ -586,6 +618,7 @@ export async function executeBatch(
         executionResult.detectedTools,
         executionResult.hookResponses,
         executionResult.errors,
+        executionResult.subagentCaptures,
         pluginName,
         config.model,
       );
@@ -624,6 +657,7 @@ export async function executeBatch(
         [],
         [],
         [errorEvent],
+        [],
         pluginName,
         config.model,
       );
@@ -655,6 +689,7 @@ function buildScenarioResult(
   detectedTools: ToolCapture[],
   hookResponses: ReturnType<typeof createHookResponseCollector>["responses"],
   errors: TranscriptErrorEvent[],
+  subagentCaptures: SubagentCapture[],
   pluginName: string,
   model: string,
 ): ExecutionResult {
@@ -677,6 +712,9 @@ function buildScenarioResult(
     transcript: buildTranscript(context, messages, errors),
     detected_tools: detectedTools,
     hook_responses: hookResponses,
+    ...(subagentCaptures.length > 0
+      ? { subagent_captures: subagentCaptures }
+      : {}),
     cost_usd: costUsd,
     api_duration_ms: durationMs,
     num_turns: numTurns,

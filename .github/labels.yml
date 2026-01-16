@@ -169,6 +169,14 @@
   color: "c5cae9"
   description: "Needs design/architecture decision"
 
+- name: "status:analyzed"
+  color: "a5d6a7"
+  description: "Issue has been analyzed by Claude"
+
+- name: "needs-analysis"
+  color: "b39ddb"
+  description: "Request Claude to analyze this issue"
+
 # =============================================================================
 # EFFORT LABELS (time estimates)
 # =============================================================================

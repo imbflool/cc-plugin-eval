@@ -84,13 +84,15 @@ Urgency classification (heat map: hot → cool):
 
 Current work state:
 
-| Label                 | Color                                                    | Description              |
-| --------------------- | -------------------------------------------------------- | ------------------------ |
-| `status:blocked`      | ![#e99695](https://placehold.co/15x15/e99695/e99695.png) | Blocked by dependencies  |
-| `status:in-progress`  | ![#90caf9](https://placehold.co/15x15/90caf9/90caf9.png) | Work in progress         |
-| `status:needs-review` | ![#fff3b3](https://placehold.co/15x15/fff3b3/fff3b3.png) | Ready for review         |
-| `status:needs-repro`  | ![#f9c4f4](https://placehold.co/15x15/f9c4f4/f9c4f4.png) | Needs reproduction steps |
-| `status:needs-design` | ![#c5cae9](https://placehold.co/15x15/c5cae9/c5cae9.png) | Needs design decision    |
+| Label                 | Color                                                    | Description                   |
+| --------------------- | -------------------------------------------------------- | ----------------------------- |
+| `status:blocked`      | ![#e99695](https://placehold.co/15x15/e99695/e99695.png) | Blocked by dependencies       |
+| `status:in-progress`  | ![#90caf9](https://placehold.co/15x15/90caf9/90caf9.png) | Work in progress              |
+| `status:needs-review` | ![#fff3b3](https://placehold.co/15x15/fff3b3/fff3b3.png) | Ready for review              |
+| `status:needs-repro`  | ![#f9c4f4](https://placehold.co/15x15/f9c4f4/f9c4f4.png) | Needs reproduction steps      |
+| `status:needs-design` | ![#c5cae9](https://placehold.co/15x15/c5cae9/c5cae9.png) | Needs design decision         |
+| `status:analyzed`     | ![#a5d6a7](https://placehold.co/15x15/a5d6a7/a5d6a7.png) | Analyzed by Claude            |
+| `needs-analysis`      | ![#b39ddb](https://placehold.co/15x15/b39ddb/b39ddb.png) | Request Claude issue analysis |
 
 ### Effort Labels
 
@@ -266,6 +268,6 @@ gh label list
 
 ## Label Count
 
-Current total: **~54 labels**
+Current total: **~56 labels**
 
 This is slightly more than typical due to the framework's multi-dimensional nature (stages + components + scopes), but each category is clearly organized and serves a distinct purpose.

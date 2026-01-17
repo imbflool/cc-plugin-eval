@@ -127,8 +127,13 @@ function checkSdkErrorType(error: unknown): boolean | undefined {
 
   // For other APIError subtypes, check status code
   if (error instanceof Anthropic.APIError) {
-    const status = error.status as number;
-    return status === 429 || (status >= 500 && status < 600);
+    // APIError.status may be number | undefined, validate at runtime
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- validated below
+    const status = error.status;
+    if (typeof status === "number") {
+      return status === 429 || (status >= 500 && status < 600);
+    }
+    return false;
   }
 
   return undefined; // Not an SDK error
@@ -207,10 +212,13 @@ export function isTransientError(error: unknown): boolean {
   }
 
   // Check for status code in error object (fallback for plain objects)
-  const errorWithStatus = error as { status?: number; statusCode?: number };
-  const status = errorWithStatus.status ?? errorWithStatus.statusCode;
-  if (typeof status === "number") {
-    return status === 429 || (status >= 500 && status < 600);
+  // Validate error is an object before accessing properties
+  if (typeof error === "object" && error !== null) {
+    const errorRecord = error as Record<string, unknown>;
+    const status = errorRecord["status"] ?? errorRecord["statusCode"];
+    if (typeof status === "number") {
+      return status === 429 || (status >= 500 && status < 600);
+    }
   }
 
   return false;

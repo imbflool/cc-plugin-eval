@@ -48,12 +48,12 @@ interface TaskToolInput {
  * @returns True if input matches Skill structure
  */
 function isSkillInput(input: unknown): input is SkillToolInput {
-  return (
-    typeof input === "object" &&
-    input !== null &&
-    "skill" in input &&
-    typeof (input as SkillToolInput).skill === "string"
-  );
+  if (typeof input !== "object" || input === null) {
+    return false;
+  }
+  // Use intermediate Record<string, unknown> for safer property access
+  const record = input as Record<string, unknown>;
+  return "skill" in record && typeof record["skill"] === "string";
 }
 
 /**
@@ -63,11 +63,13 @@ function isSkillInput(input: unknown): input is SkillToolInput {
  * @returns True if input matches Task structure
  */
 function isTaskInput(input: unknown): input is TaskToolInput {
+  if (typeof input !== "object" || input === null) {
+    return false;
+  }
+  // Use intermediate Record<string, unknown> for safer property access
+  const record = input as Record<string, unknown>;
   return (
-    typeof input === "object" &&
-    input !== null &&
-    "subagent_type" in input &&
-    typeof (input as TaskToolInput).subagent_type === "string"
+    "subagent_type" in record && typeof record["subagent_type"] === "string"
   );
 }
 

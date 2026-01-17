@@ -126,6 +126,10 @@ export function extractEnvVars(config: McpServerConfig): string[] {
   // Extract variables referenced with ${VAR} pattern from headers
   if (config.headers) {
     for (const value of Object.values(config.headers)) {
+      // Ensure value is a string before calling .match()
+      if (typeof value !== "string") {
+        continue;
+      }
       const matches = value.match(/\$\{([^}]+)\}/g);
       if (matches) {
         for (const match of matches) {
@@ -139,6 +143,10 @@ export function extractEnvVars(config: McpServerConfig): string[] {
   // Extract variables referenced with ${VAR} pattern from env values
   if (config.env) {
     for (const value of Object.values(config.env)) {
+      // Ensure value is a string before calling .match()
+      if (typeof value !== "string") {
+        continue;
+      }
       const matches = value.match(/\$\{([^}]+)\}/g);
       if (matches) {
         for (const match of matches) {

@@ -318,9 +318,13 @@ async function executeScenarioWithRetry(
       // (sendClearCommand), so they don't appear in this iteration.
       if (message.type === "user" && !userMessageId) {
         // SDK may use 'id' or 'uuid' for the message identifier
+        // Use intermediate Record<string, unknown> for safer property access
+        const msgRecord = message as Record<string, unknown>;
         const msgId =
-          (message as { id?: string }).id ??
-          (message as { uuid?: string }).uuid;
+          (typeof msgRecord["id"] === "string" ? msgRecord["id"] : undefined) ??
+          (typeof msgRecord["uuid"] === "string"
+            ? msgRecord["uuid"]
+            : undefined);
         if (msgId) {
           userMessageId = msgId;
         }

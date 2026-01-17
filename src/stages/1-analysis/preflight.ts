@@ -83,6 +83,48 @@ function validatePathBoundaries(absolutePath: string): {
 }
 
 /**
+ * Parse and validate manifest JSON content.
+ *
+ * @param manifestPath - Path to the manifest file
+ * @returns Object with manifest data or error information
+ */
+function parseManifestJson(manifestPath: string): {
+  manifest: Record<string, unknown> | null;
+  error: PreflightError | null;
+} {
+  try {
+    const content = readFileSync(manifestPath, "utf-8");
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- JSON.parse returns any
+    const parsed = JSON.parse(content);
+
+    // Validate JSON.parse result is an object
+    if (typeof parsed !== "object" || parsed === null) {
+      return {
+        manifest: null,
+        error: {
+          code: "MANIFEST_INVALID",
+          message: `plugin.json must be a JSON object, got ${parsed === null ? "null" : typeof parsed}`,
+          suggestion:
+            "Ensure plugin.json contains a JSON object (e.g., { ... }), not an array or primitive.",
+        },
+      };
+    }
+
+    return { manifest: parsed as Record<string, unknown>, error: null };
+  } catch (err) {
+    return {
+      manifest: null,
+      error: {
+        code: "MANIFEST_PARSE_ERROR",
+        message: `Invalid JSON in plugin.json: ${err instanceof Error ? err.message : String(err)}`,
+        suggestion:
+          "Validate your JSON syntax. Common issues: trailing commas, missing quotes.",
+      },
+    };
+  }
+}
+
+/**
  * Validate plugin before SDK initialization.
  * Catches common errors early with actionable suggestions.
  *
@@ -192,17 +234,11 @@ export function preflightCheck(pluginPath: string): PreflightResult {
   }
 
   // 4. Verify manifest is valid JSON
-  let manifest: Record<string, unknown>;
-  try {
-    const content = readFileSync(resolvedManifestPath, "utf-8");
-    manifest = JSON.parse(content) as Record<string, unknown>;
-  } catch (err) {
-    errors.push({
-      code: "MANIFEST_PARSE_ERROR",
-      message: `Invalid JSON in plugin.json: ${err instanceof Error ? err.message : String(err)}`,
-      suggestion:
-        "Validate your JSON syntax. Common issues: trailing commas, missing quotes.",
-    });
+  const { manifest, error: parseError } =
+    parseManifestJson(resolvedManifestPath);
+
+  if (parseError) {
+    errors.push(parseError);
     return {
       valid: false,
       pluginPath: absolutePath,
@@ -212,6 +248,12 @@ export function preflightCheck(pluginPath: string): PreflightResult {
       errors,
       warnings,
     };
+  }
+
+  // manifest is guaranteed non-null when parseError is null
+  if (!manifest) {
+    // This should never happen, but satisfies TypeScript
+    throw new Error("Unexpected null manifest without parse error");
   }
 
   // 5. Validate required fields

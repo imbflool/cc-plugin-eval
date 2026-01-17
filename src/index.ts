@@ -374,6 +374,106 @@ function extractCLIOptions(
   return cliOptions;
 }
 
+/**
+ * Valid pipeline stages for resume command.
+ */
+const VALID_STAGES = [
+  "analysis",
+  "generation",
+  "execution",
+  "evaluation",
+] as const;
+
+/**
+ * Extract and validate resume command options.
+ */
+function extractResumeOptions(options: Record<string, unknown>): {
+  pluginName: string | undefined;
+  runId: string | undefined;
+  fromStage: PipelineStage | undefined;
+  error: string | undefined;
+} {
+  const rawPluginName = options["plugin"];
+  const rawRunId = options["runId"];
+  const rawFromStage = options["fromStage"];
+
+  const pluginName =
+    typeof rawPluginName === "string" ? rawPluginName : undefined;
+  const runId = typeof rawRunId === "string" ? rawRunId : undefined;
+
+  // Validate fromStage is a valid pipeline stage
+  let fromStage: PipelineStage | undefined;
+  let error: string | undefined;
+
+  if (rawFromStage !== undefined) {
+    if (
+      typeof rawFromStage === "string" &&
+      VALID_STAGES.includes(rawFromStage as (typeof VALID_STAGES)[number])
+    ) {
+      fromStage = rawFromStage as PipelineStage;
+    } else {
+      const stageStr =
+        typeof rawFromStage === "string"
+          ? rawFromStage
+          : JSON.stringify(rawFromStage);
+      error = `Invalid stage: ${stageStr}. Must be one of: ${VALID_STAGES.join(", ")}`;
+    }
+  }
+
+  return { pluginName, runId, fromStage, error };
+}
+
+/**
+ * Extract and validate report command options.
+ */
+function extractReportOptions(options: Record<string, unknown>): {
+  pluginName: string | undefined;
+  runId: string | undefined;
+  outputFormat: string;
+  cliOutput: boolean | undefined;
+} {
+  const rawPluginName = options["plugin"];
+  const rawRunId = options["runId"];
+  const rawOutput = options["output"];
+  const rawCli = options["cli"];
+
+  return {
+    pluginName: typeof rawPluginName === "string" ? rawPluginName : undefined,
+    runId: typeof rawRunId === "string" ? rawRunId : undefined,
+    outputFormat: typeof rawOutput === "string" ? rawOutput : "json",
+    cliOutput: typeof rawCli === "boolean" ? rawCli : undefined,
+  };
+}
+
+/**
+ * Evaluation file structure for report command.
+ */
+interface EvaluationFile {
+  plugin_name: string;
+  metrics: Record<string, unknown>;
+  results: Record<string, unknown>[];
+}
+
+/**
+ * Load and validate evaluation file.
+ * Returns null if validation fails.
+ */
+function loadEvaluationFile(evaluationPath: string): EvaluationFile | null {
+  const rawEvaluation = readJson(evaluationPath);
+
+  if (
+    typeof rawEvaluation !== "object" ||
+    rawEvaluation === null ||
+    typeof (rawEvaluation as Record<string, unknown>)["plugin_name"] !==
+      "string" ||
+    !Array.isArray((rawEvaluation as Record<string, unknown>)["results"])
+  ) {
+    return null;
+  }
+
+  return rawEvaluation as EvaluationFile;
+}
+
 // =============================================================================
 // Pipeline Commands Group
 // =============================================================================
@@ -717,11 +817,16 @@ program
   )
   .action(async (options: Record<string, unknown>) => {
     try {
-      const pluginName = options["plugin"] as string | undefined;
-      let runId = options["runId"] as string | undefined;
-      const fromStage = options["fromStage"] as PipelineStage | undefined;
+      // Extract and validate CLI options
+      const extracted = extractResumeOptions(options);
+      const { pluginName, fromStage, error } = extracted;
+      let { runId } = extracted;
 
-      // If no run ID provided, find the latest run for the plugin
+      if (error) {
+        logger.error(error);
+        process.exit(1);
+      }
+
       if (!runId && pluginName) {
         runId = findLatestRun(pluginName) ?? undefined;
         if (!runId) {
@@ -793,10 +898,10 @@ program
   .option("--cli", "Output CLI summary")
   .action((options: Record<string, unknown>) => {
     try {
-      const pluginName = options["plugin"] as string | undefined;
-      let runId = options["runId"] as string | undefined;
-      const outputFormat = (options["output"] as string | undefined) ?? "json";
-      const cliOutput = options["cli"] as boolean | undefined;
+      // Extract and validate CLI options
+      const extracted = extractReportOptions(options);
+      const { pluginName, outputFormat, cliOutput } = extracted;
+      let { runId } = extracted;
 
       // Find run if not specified
       if (!runId && pluginName) {
@@ -824,12 +929,12 @@ program
 
       // Load evaluation results
       const evaluationPath = `${resultsDir}/evaluation.json`;
-      interface EvaluationFile {
-        plugin_name: string;
-        metrics: Record<string, unknown>;
-        results: Record<string, unknown>[];
+      const evaluation = loadEvaluationFile(evaluationPath);
+
+      if (!evaluation) {
+        logger.error(`Invalid evaluation file format: ${evaluationPath}`);
+        process.exit(1);
       }
-      const evaluation = readJson(evaluationPath) as EvaluationFile;
 
       if (cliOutput) {
         // Output CLI summary
@@ -948,9 +1053,17 @@ function outputJUnitXML(
   xml += `  <testsuite name="${pluginName}" tests="${String(results.length)}" failures="${String(failures.length)}">\n`;
 
   for (const result of results) {
-    const scenarioId = result["scenario_id"] as string;
-    const triggered = result["triggered"] as boolean;
-    const expected = result["expected_trigger"] as boolean | undefined;
+    // Runtime validation: ensure values are correct types before use
+    const scenarioId =
+      typeof result["scenario_id"] === "string"
+        ? result["scenario_id"]
+        : "unknown";
+    const triggered =
+      typeof result["triggered"] === "boolean" ? result["triggered"] : false;
+    const expected =
+      typeof result["expected_trigger"] === "boolean"
+        ? result["expected_trigger"]
+        : undefined;
     const passed = expected === undefined || triggered === expected;
 
     xml += `    <testcase name="${scenarioId}" classname="${pluginName}">\n`;
@@ -977,9 +1090,17 @@ function outputTAP(results: Record<string, unknown>[]): void {
 
   let i = 1;
   for (const result of results) {
-    const scenarioId = result["scenario_id"] as string;
-    const triggered = result["triggered"] as boolean;
-    const expected = result["expected_trigger"] as boolean | undefined;
+    // Runtime validation: ensure values are correct types before use
+    const scenarioId =
+      typeof result["scenario_id"] === "string"
+        ? result["scenario_id"]
+        : "unknown";
+    const triggered =
+      typeof result["triggered"] === "boolean" ? result["triggered"] : false;
+    const expected =
+      typeof result["expected_trigger"] === "boolean"
+        ? result["expected_trigger"]
+        : undefined;
     const passed = expected === undefined || triggered === expected;
 
     if (passed) {

@@ -387,11 +387,13 @@ export function updateStateAfterExecution(
   const updated: PipelineState =
     failedIds.length > 0 ? { ...base, failed_scenario_ids: failedIds } : base;
 
-  // Remove partial_executions by creating clean object
-  delete (updated as Partial<PipelineState>).partial_executions;
+  // Remove partial_executions using destructuring (safer than delete with type cast)
+  const { partial_executions: _unusedPartial, ...cleanState } =
+    updated as PipelineState & { partial_executions?: unknown };
+  const finalState = cleanState as PipelineState;
 
-  saveState(updated);
-  return updated;
+  saveState(finalState);
+  return finalState;
 }
 
 /**
@@ -412,11 +414,13 @@ export function updateStateAfterEvaluation(
     timestamp: new Date().toISOString(),
   };
 
-  // Remove partial_evaluations by creating clean object
-  delete (updated as Partial<PipelineState>).partial_evaluations;
+  // Remove partial_evaluations using destructuring (safer than delete with type cast)
+  const { partial_evaluations: _unusedPartial, ...cleanState } =
+    updated as PipelineState & { partial_evaluations?: unknown };
+  const finalState = cleanState as PipelineState;
 
-  saveState(updated);
-  return updated;
+  saveState(finalState);
+  return finalState;
 }
 
 /**

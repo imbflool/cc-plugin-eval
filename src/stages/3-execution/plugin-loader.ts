@@ -156,8 +156,10 @@ export async function verifyPluginLoad(
         model: config.model,
         maxTurns: 1,
         persistSession: false,
-        permissionMode: "bypassPermissions",
-        allowDangerouslySkipPermissions: true,
+        permissionMode: config.permission_bypass
+          ? "bypassPermissions"
+          : "default",
+        allowDangerouslySkipPermissions: config.permission_bypass,
         abortController: controller,
         stderr: (data: string): void => {
           const elapsed = Date.now() - startTime;

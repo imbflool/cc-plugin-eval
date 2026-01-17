@@ -191,8 +191,18 @@ generation:
 #   permission_bypass - Automatically approve permission prompts
 #     Possible values:
 #       - true - Auto-approve all permissions (required for automation)
-#       - false - Manual approval (breaks automation)
+#       - false - Manual approval (breaks automation, use for untrusted plugins)
 #     Default: true
+#
+#     ⚠️  SECURITY: When true, the SDK uses allowDangerouslySkipPermissions,
+#     meaning plugins can execute any tool without confirmation. This is required
+#     for unattended evaluation but has security implications:
+#       - Plugins can perform any action permitted by allowed_tools/disallowed_tools
+#       - Use strict disallowed_tools (minimum: [Write, Edit, Bash])
+#       - Run in sandboxed/containerized environments for untrusted plugins
+#       - Set to false only for manual review scenarios (disables automation)
+#
+#     See SECURITY.md for enterprise deployment guidance.
 #
 #   allowed_tools - Whitelist of allowed tools (null = all allowed)
 #     Possible values:
@@ -336,20 +346,29 @@ evaluation:
 #   sanitize_transcripts - Redact PII from saved transcript files
 #     Possible values:
 #       - true - Apply PII redaction before saving transcripts
-#       - false - Save transcripts as-is
+#       - false - Save transcripts as-is (default)
 #     Default: false
 #
 #   sanitize_logs - Redact PII from verbose console output
 #     Possible values:
 #       - true - Apply PII redaction to console logs
-#       - false - Log output as-is
+#       - false - Log output as-is (default)
 #     Default: false
 #
 #   sanitization - Advanced sanitization settings (optional)
+#     enabled - Master switch for sanitization (default: false for backwards compatibility)
+#       ⚠️  ENTERPRISE: Enable this for PII-sensitive environments or compliance:
+#         - GDPR, HIPAA, SOC 2, or similar regulations
+#         - Plugins that handle personally identifiable information
+#         - Sharing evaluation results with third parties
+#         - Storing transcripts in systems without equivalent redaction
+#
 #     custom_patterns - Additional regex patterns to redact
 #       - pattern: Regex string (will be compiled with 'g' flag)
 #       - replacement: Replacement string for matches
 #     Default patterns include: API keys, JWTs, emails, phone numbers, SSNs, credit cards
+#
+#     See SECURITY.md for detailed sanitization configuration and enterprise guidance.
 #
 #     pattern_safety_acknowledged - Bypass ReDoS safety validation (default: false)
 #       ⚠️  SECURITY WARNING: Custom regex patterns may cause ReDoS attacks.

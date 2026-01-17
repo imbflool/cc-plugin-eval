@@ -447,33 +447,60 @@ tests/
 
 ## Security Considerations
 
-### Permission Bypass
+### Permission Bypass Mode
 
-By default, `execution.permission_bypass: true` automatically approves all permission prompts during evaluation. This is required for automated evaluation but means:
+**Default: `execution.permission_bypass: true`** enables automated evaluation by automatically approving all tool invocations. This is required for unattended runs but has security implications:
 
-- The Claude agent can perform any action the allowed tools permit
-- Use `disallowed_tools` to restrict dangerous operations
-- Consider running evaluations in isolated environments for untrusted plugins
+- ✅ Required for CI/CD and automated evaluation
+- ⚠️ Plugins can perform any action permitted by allowed tools
+- 🔒 Use `disallowed_tools` to restrict dangerous operations (default: `[Write, Edit, Bash]`)
+- 🔒 For untrusted plugins, set `permission_bypass: false` for manual review (disables automation)
+
+**Security Note**: With permission bypass enabled, use strict `disallowed_tools` and run in sandboxed environments when evaluating untrusted plugins.
+
+### PII Protection & Compliance
+
+**Default: `output.sanitization.enabled: false`** for backwards compatibility. Enable sanitization for PII-sensitive environments:
+
+```yaml
+output:
+  sanitize_transcripts: true # Redact saved files
+  sanitize_logs: true # Redact console output
+  sanitization:
+    enabled: true
+    custom_patterns: # Optional domain-specific patterns
+      - pattern: "INTERNAL-\\w+"
+        replacement: "[REDACTED_ID]"
+```
+
+**Built-in redaction**: API keys, JWT tokens, emails, phone numbers, SSNs, credit card numbers.
+
+**Enterprise use cases**: Enable when handling PII or complying with GDPR, HIPAA, SOC 2, or similar regulations.
 
 ### Default Tool Restrictions
 
-The default `disallowed_tools: [Write, Edit, Bash]` prevents file modifications and shell commands during evaluation. Modify with caution:
+The default `disallowed_tools: [Write, Edit, Bash]` prevents file modifications and shell commands. Modify with caution:
 
 - Enable `Write`/`Edit` only if testing file-modifying plugins
 - Enable `Bash` only if testing shell-executing plugins
 - Use `rewind_file_changes: true` to restore files after each scenario
 
-### Sensitive Data
+### Additional Safeguards
 
-- API keys are loaded from environment variables, never stored in config
-- PII sanitization is available but **disabled by default**
-- Enable via `output.sanitize_logs` and `output.sanitize_transcripts` in config
-- Custom sanitization patterns are validated for ReDoS safety
-- Transcripts may contain user-provided data; enable sanitization or review before sharing
+- **API keys**: Loaded from environment variables (`.env`), never stored in config
+- **Budget limits**: Set `execution.max_budget_usd` to cap API spending
+- **Timeout limits**: Set `execution.timeout_ms` to prevent runaway executions
+- **Plugin loading**: Only local plugins supported (`plugin.path`), no remote loading
+- **ReDoS protection**: Custom sanitization patterns validated for Regular Expression Denial of Service vulnerabilities
 
-### Plugin Loading
+### Enterprise Deployments
 
-Only local plugins are supported (`plugin.path`). There is no remote plugin loading, reducing supply chain risks.
+For production/enterprise environments with compliance requirements, see the comprehensive security guide in [SECURITY.md](SECURITY.md), including:
+
+- Threat model and risk assessment
+- Sandbox and isolation recommendations
+- Compliance checklist (GDPR, HIPAA, SOC 2)
+- Container isolation patterns
 
 ## Contributing
 

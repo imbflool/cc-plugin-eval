@@ -92,8 +92,8 @@ export interface ExecutionConfig {
   permission_bypass: boolean;
   /** null = all tools, or list for restrictions */
   allowed_tools?: string[];
-  /** Block certain tools during eval */
-  disallowed_tools?: string[];
+  /** Block certain tools during eval. Default: ["Write", "Edit", "Bash"] */
+  disallowed_tools: string[];
   /** Repetitions per scenario */
   num_reps: number;
   /** Load alongside target plugin for conflict testing */

@@ -145,7 +145,8 @@ export const ExecutionConfigSchema = z.object({
   session_strategy: SessionStrategySchema.optional(),
   permission_bypass: z.boolean().default(true),
   allowed_tools: z.array(z.string()).optional(),
-  disallowed_tools: z.array(z.string()).optional(),
+  /** Secure default: block file modifications and shell commands */
+  disallowed_tools: z.array(z.string()).default(["Write", "Edit", "Bash"]),
   num_reps: z.number().int().min(1).max(10).default(1),
   additional_plugins: z.array(z.string()).default([]),
   /** Rate limit API calls (requests per second). null = no limit. */

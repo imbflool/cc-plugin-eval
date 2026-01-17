@@ -95,16 +95,16 @@ This project has MCP tools configured for efficient code exploration and editing
 
 Use this decision tree to pick the right tool:
 
-| Task | Tool | Why |
-| --- | --- | --- |
-| **Edit any file** | `edit_file` (Morph) | 10,500 tok/s, 98% accuracy, partial snippets |
-| **Find symbol by exact name** | `find_symbol` (Serena) | LSP-powered precision, no false positives |
-| **Find all callers/usages** | `find_referencing_symbols` (Serena) | Semantic analysis of symbol relationships |
-| **Explore unfamiliar code** | `warpgrep_codebase_search` (Morph) | Autonomous sub-agent, parallel search |
-| **Understand file structure** | `get_symbols_overview` (Serena) | Quick overview without reading full file |
-| **Rename across codebase** | `rename_symbol` (Serena) | Safe refactoring with LSP |
-| **Exact text pattern** | `rg` or `Grep` | Fast literal/regex matching |
-| **Edit a complete method** | `replace_symbol_body` (Serena) | When replacing entire function body |
+| Task                          | Tool                                | Why                                          |
+| ----------------------------- | ----------------------------------- | -------------------------------------------- |
+| **Edit any file**             | `edit_file` (Morph)                 | 10,500 tok/s, 98% accuracy, partial snippets |
+| **Find symbol by exact name** | `find_symbol` (Serena)              | LSP-powered precision, no false positives    |
+| **Find all callers/usages**   | `find_referencing_symbols` (Serena) | Semantic analysis of symbol relationships    |
+| **Explore unfamiliar code**   | `warpgrep_codebase_search` (Morph)  | Autonomous sub-agent, parallel search        |
+| **Understand file structure** | `get_symbols_overview` (Serena)     | Quick overview without reading full file     |
+| **Rename across codebase**    | `rename_symbol` (Serena)            | Safe refactoring with LSP                    |
+| **Exact text pattern**        | `rg` or `Grep`                      | Fast literal/regex matching                  |
+| **Edit a complete method**    | `replace_symbol_body` (Serena)      | When replacing entire function body          |
 
 **When to use Morph tools:**
 
@@ -124,7 +124,7 @@ Use this decision tree to pick the right tool:
 // ALWAYS include the instruction parameter - it disambiguates edits
 edit_file({
   path: "/abs/path/to/file.ts",
-  instruction: "Add timeout to fetch call",  // Required for clarity
+  instruction: "Add timeout to fetch call", // Required for clarity
   code_edit: `
 export async function fetchData(url: string) {
   // ... existing code ...
@@ -134,8 +134,8 @@ export async function fetchData(url: string) {
   });
   // ... existing code ...
 }
-`
-})
+`,
+});
 ```
 
 **Key patterns:**
@@ -148,13 +148,13 @@ export async function fetchData(url: string) {
 
 ### warpgrep vs Serena: Quick Reference
 
-| Scenario | Use This |
-| --- | --- |
-| "Where is the auth flow?" | `warpgrep_codebase_search` |
-| "Find the `runEvaluation` function" | `find_symbol` |
-| "What calls `detectFromCaptures`?" | `find_referencing_symbols` |
-| "How does conflict detection work?" | `warpgrep_codebase_search` |
-| "Show me all exports in types/index.ts" | `get_symbols_overview` |
+| Scenario                                | Use This                   |
+| --------------------------------------- | -------------------------- |
+| "Where is the auth flow?"               | `warpgrep_codebase_search` |
+| "Find the `runEvaluation` function"     | `find_symbol`              |
+| "What calls `detectFromCaptures`?"      | `find_referencing_symbols` |
+| "How does conflict detection work?"     | `warpgrep_codebase_search` |
+| "Show me all exports in types/index.ts" | `get_symbols_overview`     |
 
 ### Navigation Patterns
 

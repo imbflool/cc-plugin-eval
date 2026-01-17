@@ -177,6 +177,8 @@ interface BuildScenarioQueryInputOptions {
   enableFileCheckpointing?: boolean | undefined;
   /** Enable MCP server discovery via settingSources */
   enableMcpDiscovery?: boolean | undefined;
+  /** Bypass permission prompts (required for automation) */
+  permissionBypass?: boolean | undefined;
 }
 
 /**
@@ -295,6 +297,7 @@ async function executeScenarioWithRetry(
     },
     enableFileCheckpointing: useCheckpointing,
     enableMcpDiscovery,
+    permissionBypass: config.permission_bypass,
   });
 
   // Execute with retry for transient errors
@@ -381,6 +384,7 @@ function buildScenarioQueryInput(
     onStderr,
     enableFileCheckpointing,
     enableMcpDiscovery = true,
+    permissionBypass = true,
   } = options;
 
   // Determine settingSources based on MCP discovery option
@@ -402,8 +406,8 @@ function buildScenarioQueryInput(
       ...(maxBudgetUsd !== undefined ? { maxBudgetUsd } : {}),
       ...(enableFileCheckpointing ? { enableFileCheckpointing } : {}),
       abortController,
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
+      permissionMode: permissionBypass ? "bypassPermissions" : "default",
+      allowDangerouslySkipPermissions: permissionBypass,
       hooks: {
         PreToolUse: [
           {
@@ -459,6 +463,8 @@ interface SendClearCommandOptions {
   queryFn?: QueryFunction | undefined;
   /** Enable MCP server discovery via settingSources */
   enableMcpDiscovery?: boolean | undefined;
+  /** Bypass permission prompts (required for automation) */
+  permissionBypass?: boolean | undefined;
 }
 
 /**
@@ -476,6 +482,7 @@ async function sendClearCommand(
     abortController,
     queryFn,
     enableMcpDiscovery = true,
+    permissionBypass = true,
   } = options;
 
   // Determine settingSources based on MCP discovery option
@@ -496,8 +503,8 @@ async function sendClearCommand(
       persistSession: true,
       continue: true,
       abortController,
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
+      permissionMode: permissionBypass ? "bypassPermissions" : "default",
+      allowDangerouslySkipPermissions: permissionBypass,
     },
   };
 
@@ -642,6 +649,7 @@ export async function executeBatch(
           abortController: controller,
           queryFn,
           enableMcpDiscovery: options.enableMcpDiscovery,
+          permissionBypass: config.permission_bypass,
         });
       }
     } catch (err) {

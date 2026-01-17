@@ -39,6 +39,8 @@ export const DEFAULT_EXECUTION = {
   max_budget_usd: 10.0,
   session_isolation: false,
   permission_bypass: true,
+  /** Secure default: block file modifications and shell commands */
+  disallowed_tools: ["Write", "Edit", "Bash"] as string[],
   num_reps: 1,
   additional_plugins: [] as string[],
 };

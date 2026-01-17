@@ -128,9 +128,7 @@ function buildQueryInput(
       plugins,
       settingSources,
       allowedTools,
-      ...(config.disallowed_tools
-        ? { disallowedTools: config.disallowed_tools }
-        : {}),
+      disallowedTools: config.disallowed_tools,
       model: config.model,
       // Use Claude Code system prompt for accurate plugin evaluation
       systemPrompt: { type: "preset", preset: "claude_code" },
@@ -138,8 +136,10 @@ function buildQueryInput(
       persistSession: false, // Session isolation
       maxBudgetUsd: config.max_budget_usd,
       abortController,
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
+      permissionMode: config.permission_bypass
+        ? "bypassPermissions"
+        : "default",
+      allowDangerouslySkipPermissions: config.permission_bypass,
       ...(config.max_thinking_tokens !== undefined
         ? { maxThinkingTokens: config.max_thinking_tokens }
         : {}),
@@ -426,9 +426,7 @@ export async function executeScenarioWithCheckpoint(
           "Glob",
           "Grep",
         ],
-        ...(config.disallowed_tools
-          ? { disallowedTools: config.disallowed_tools }
-          : {}),
+        disallowedTools: config.disallowed_tools,
         model: config.model,
         // Use Claude Code system prompt for accurate plugin evaluation
         systemPrompt: { type: "preset", preset: "claude_code" },
@@ -436,8 +434,10 @@ export async function executeScenarioWithCheckpoint(
         persistSession: false,
         maxBudgetUsd: config.max_budget_usd,
         abortController: controller,
-        permissionMode: "bypassPermissions",
-        allowDangerouslySkipPermissions: true,
+        permissionMode: config.permission_bypass
+          ? "bypassPermissions"
+          : "default",
+        allowDangerouslySkipPermissions: config.permission_bypass,
         enableFileCheckpointing: true, // Enable for rewind
         hooks: {
           PreToolUse: [{ matcher: ".*", hooks: [preHook] }],

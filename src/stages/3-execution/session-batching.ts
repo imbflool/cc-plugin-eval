@@ -9,7 +9,13 @@ import { logger } from "../../utils/logging.js";
 import { withRetry } from "../../utils/retry.js";
 
 import { createHookResponseCollector } from "./hook-capture.js";
-import { createCaptureHooksConfig } from "./hooks-factory.js";
+import {
+  createCaptureHooksConfig,
+  createBatchStatelessHooks,
+  createScenarioStatefulHooks,
+  assembleHooksConfig,
+  type StatelessHooks,
+} from "./hooks-factory.js";
 import {
   executeQuery,
   isErrorMessage,
@@ -173,6 +179,11 @@ interface BuildScenarioQueryInputOptions {
   enableMcpDiscovery?: boolean | undefined;
   /** Bypass permission prompts (required for automation) */
   permissionBypass?: boolean | undefined;
+  /**
+   * Pre-created stateless hooks shared across the batch.
+   * When provided, only stateful hooks (PreToolUse, SubagentStart) are created fresh.
+   */
+  sharedStatelessHooks?: StatelessHooks | undefined;
 }
 
 /**
@@ -203,6 +214,23 @@ interface ExecuteScenarioWithRetryOptions {
   pluginName: string;
   /** Query function (for testing) */
   queryFn?: QueryFunction | undefined;
+  /**
+   * Pre-created capture maps shared across the batch.
+   * When provided, these maps are used instead of creating new ones per scenario.
+   * The caller is responsible for clearing these maps between scenarios.
+   */
+  sharedCaptureMaps?:
+    | {
+        captureMap: Map<string, ToolCapture>;
+        subagentCaptureMap: Map<string, SubagentCapture>;
+      }
+    | undefined;
+  /**
+   * Pre-created stateless hooks shared across the batch.
+   * These hooks (PostToolUse, PostToolUseFailure, SubagentStop) only read/write
+   * to capture maps and can be reused across scenarios.
+   */
+  sharedStatelessHooks?: StatelessHooks | undefined;
 }
 
 /**
@@ -248,6 +276,8 @@ async function executeScenarioWithRetry(
     startTime,
     pluginName,
     queryFn,
+    sharedCaptureMaps,
+    sharedStatelessHooks,
   } = options;
 
   const scenarioMessages: SDKMessage[] = [];
@@ -258,10 +288,12 @@ async function executeScenarioWithRetry(
   let userMessageId: string | undefined;
 
   // Create capture map for correlating Pre/Post hooks by toolUseId
-  const captureMap = new Map<string, ToolCapture>();
+  const captureMap =
+    sharedCaptureMaps?.captureMap ?? new Map<string, ToolCapture>();
 
   // Create capture map for correlating SubagentStart/SubagentStop hooks by agentId
-  const subagentCaptureMap = new Map<string, SubagentCapture>();
+  const subagentCaptureMap =
+    sharedCaptureMaps?.subagentCaptureMap ?? new Map<string, SubagentCapture>();
 
   logger.debug(
     `Batch: executing scenario ${String(scenarioIndex + 1)}/${String(totalScenarios)}: ${scenario.id}`,
@@ -292,6 +324,7 @@ async function executeScenarioWithRetry(
     enableFileCheckpointing: useCheckpointing,
     enableMcpDiscovery,
     permissionBypass: config.permission_bypass,
+    sharedStatelessHooks,
   });
 
   // Execute with retry for transient errors
@@ -385,18 +418,33 @@ function buildScenarioQueryInput(
     enableFileCheckpointing,
     enableMcpDiscovery = true,
     permissionBypass = true,
+    sharedStatelessHooks,
   } = options;
 
   // Determine settingSources based on MCP discovery option
   const settingSources: SettingSource[] = enableMcpDiscovery ? ["project"] : [];
 
-  // Create capture hooks using the factory
-  const hooksConfig = createCaptureHooksConfig({
-    captureMap,
-    onToolCapture,
-    subagentCaptureMap,
-    onSubagentCapture,
-  });
+  // Create capture hooks configuration.
+  // When shared stateless hooks are provided (batch execution), use hybrid approach:
+  // - Reuse stateless hooks (PostToolUse, PostToolUseFailure, SubagentStop) from batch
+  // - Create fresh stateful hooks (PreToolUse, SubagentStart) per scenario for closure isolation
+  // This reduces memory allocations by ~60% for hook callbacks.
+  const hooksConfig = sharedStatelessHooks
+    ? assembleHooksConfig(
+        sharedStatelessHooks,
+        createScenarioStatefulHooks({
+          captureMap,
+          onToolCapture,
+          subagentCaptureMap,
+          onSubagentCapture,
+        }),
+      )
+    : createCaptureHooksConfig({
+        captureMap,
+        onToolCapture,
+        subagentCaptureMap,
+        onSubagentCapture,
+      });
 
   return {
     prompt: scenario.user_prompt,
@@ -572,9 +620,28 @@ export async function executeBatch(
     "Grep",
   ];
 
+  // Create shared capture maps and stateless hooks ONCE per batch.
+  // This optimization reduces memory allocations by ~60% for hook callbacks:
+  // - Capture maps are cleared between scenarios (same map instances reused)
+  // - Stateless hooks (PostToolUse, PostToolUseFailure, SubagentStop) are reused
+  // - Stateful hooks (PreToolUse, SubagentStart) are created fresh per scenario
+  const sharedCaptureMaps = {
+    captureMap: new Map<string, ToolCapture>(),
+    subagentCaptureMap: new Map<string, SubagentCapture>(),
+  };
+  const sharedStatelessHooks = createBatchStatelessHooks({
+    captureMap: sharedCaptureMaps.captureMap,
+    subagentCaptureMap: sharedCaptureMaps.subagentCaptureMap,
+  });
+
   // Process each scenario in the batch
   for (const scenario of scenarios) {
     const scenarioIndex = results.length;
+
+    // Clear capture maps for this scenario to ensure isolation.
+    // The stateless hooks continue to reference these same map instances.
+    sharedCaptureMaps.captureMap.clear();
+    sharedCaptureMaps.subagentCaptureMap.clear();
 
     // Create abort controller for this scenario
     const controller = new AbortController();
@@ -595,6 +662,8 @@ export async function executeBatch(
         startTime,
         pluginName,
         queryFn,
+        sharedCaptureMaps,
+        sharedStatelessHooks,
       });
 
       // Build result for this scenario

@@ -18,6 +18,7 @@ import {
   type SDKAssistantMessage,
   type SDKToolResultMessage,
   type SDKSystemMessage,
+  type SDKPermissionDenial,
 } from "./sdk-client.js";
 
 import type {
@@ -81,15 +82,15 @@ function convertAssistantMessage(msg: SDKAssistantMessage): AssistantEvent {
   // Extract text content
   const textParts = msg.message.content
     .filter((c) => c.type === "text")
-    .map((c) => c.text ?? "");
+    .map((c) => c.text);
   const content = textParts.join("\n");
 
   // Extract tool calls
   const toolCalls: ToolCall[] = msg.message.content
     .filter((c) => c.type === "tool_use")
     .map((c) => ({
-      id: c.id ?? generateEventId(),
-      name: c.name ?? "",
+      id: c.id,
+      name: c.name,
       input: c.input,
     }));
 
@@ -198,7 +199,7 @@ export function extractMetrics(messages: SDKMessage[]): {
   costUsd: number;
   durationMs: number;
   numTurns: number;
-  permissionDenials: string[];
+  permissionDenials: SDKPermissionDenial[];
 } {
   const resultMsg = messages.find(isResultMessage);
 
@@ -241,8 +242,9 @@ export function createErrorEvent(
  * @returns Session ID or undefined
  */
 export function extractSessionId(messages: SDKMessage[]): string | undefined {
-  const initMsg = messages.find(
-    (m): m is SDKSystemMessage => isSystemMessage(m) && m.subtype === "init",
+  // SDKSystemMessage always has subtype='init'
+  const initMsg = messages.find((m): m is SDKSystemMessage =>
+    isSystemMessage(m),
   );
 
   return initMsg?.session_id;

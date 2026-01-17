@@ -178,8 +178,8 @@ export async function verifyPluginLoad(
       // Track first message timing
       timings.firstMessage ??= Date.now();
 
-      // Check for init message
-      if (isSystemMessage(message) && message.subtype === "init") {
+      // Check for init message (SDKSystemMessage always has subtype='init')
+      if (isSystemMessage(message)) {
         timings.initMessage = Date.now();
         const initResult = processInitMessage(message, pluginPath, timings);
 
@@ -190,10 +190,11 @@ export async function verifyPluginLoad(
       }
 
       // Check for error messages during init
-      if (isErrorMessage(message)) {
+      // Note: SDK may send error messages not in its TypeScript union
+      if (isErrorMessage(message as unknown)) {
         return createFailedResult(
           pluginPath,
-          `Plugin initialization error: ${message.error ?? "Unknown error"}`,
+          `Plugin initialization error: ${(message as unknown as { error?: string }).error ?? "Unknown error"}`,
           "unknown",
           timings,
         );
@@ -337,7 +338,7 @@ function processInitMessage(
   timings: PluginLoadTimings,
 ): PluginLoadResult {
   // Check if our plugin is in the loaded plugins array
-  const loadedPlugins = initMsg.plugins ?? [];
+  const loadedPlugins = initMsg.plugins;
   const targetPlugin = loadedPlugins.find(
     (p) => p.path === pluginPath || p.path.endsWith(pluginPath),
   );
@@ -353,28 +354,32 @@ function processInitMessage(
 
   // Extract MCP server status with detailed tool mapping
   // MCP tools from plugins use pattern: mcp__plugin_<plugin-name>_<server-name>__<tool-name>
-  const mcpServers: McpServerStatus[] = (initMsg.mcp_servers ?? []).map(
-    (server) => {
-      const pluginServerPrefix = `mcp__plugin_${targetPlugin.name}_${server.name}__`;
-      const directServerPrefix = `mcp__${server.name}__`;
-      const serverTools = (initMsg.tools ?? []).filter(
-        (t) =>
-          t.startsWith(pluginServerPrefix) || t.startsWith(directServerPrefix),
-      );
+  const mcpServers: McpServerStatus[] = initMsg.mcp_servers.map((server) => {
+    const pluginServerPrefix = `mcp__plugin_${targetPlugin.name}_${server.name}__`;
+    const directServerPrefix = `mcp__${server.name}__`;
+    const serverTools = initMsg.tools.filter(
+      (t) =>
+        t.startsWith(pluginServerPrefix) || t.startsWith(directServerPrefix),
+    );
 
-      const result: McpServerStatus = {
-        name: server.name,
-        status: server.status as McpServerStatus["status"],
-        tools: serverTools,
-      };
+    const result: McpServerStatus = {
+      name: server.name,
+      status: server.status as McpServerStatus["status"],
+      tools: serverTools,
+    };
 
-      if (server.status === "failed" && server.error) {
-        result.error = server.error;
-      }
+    // SDK may include error field at runtime even though it's not in the type
+    const serverWithError = server as {
+      name: string;
+      status: string;
+      error?: string;
+    };
+    if (server.status === "failed" && serverWithError.error) {
+      result.error = serverWithError.error;
+    }
 
-      return result;
-    },
-  );
+    return result;
+  });
 
   // Build diagnostics
   const queryComplete = Date.now();
@@ -384,7 +389,7 @@ function processInitMessage(
     components_discovered: {
       skills: 0, // Will be filled by analysis stage
       agents: 0,
-      commands: (initMsg.slash_commands ?? []).length,
+      commands: initMsg.slash_commands.length,
       hooks: false,
       mcp_servers: mcpServers.length,
     },
@@ -396,14 +401,12 @@ function processInitMessage(
     loaded: true,
     plugin_name: targetPlugin.name,
     plugin_path: pluginPath,
-    registered_tools: initMsg.tools ?? [],
-    registered_commands: initMsg.slash_commands ?? [],
-    registered_skills: (initMsg.slash_commands ?? []).filter(
-      (c) => !c.startsWith("/"),
-    ),
+    registered_tools: initMsg.tools,
+    registered_commands: initMsg.slash_commands,
+    registered_skills: initMsg.slash_commands.filter((c) => !c.startsWith("/")),
     registered_agents: [], // Agents aren't listed in init, detected via Task tool usage
     mcp_servers: mcpServers,
-    session_id: initMsg.session_id ?? "",
+    session_id: initMsg.session_id,
     diagnostics,
   };
 }

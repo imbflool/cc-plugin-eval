@@ -19,6 +19,7 @@ import {
   isResultMessage,
   isUserMessage,
   type SDKMessage,
+  type SDKPermissionDenial,
   type QueryInput,
   type QueryObject,
   type PluginReference,
@@ -167,7 +168,7 @@ function extractResultMetrics(messages: SDKMessage[]): {
   costUsd: number;
   durationMs: number;
   numTurns: number;
-  permissionDenials: string[];
+  permissionDenials: SDKPermissionDenial[];
   modelUsage?: Record<string, ModelUsage>;
   cacheReadTokens: number;
   cacheCreationTokens: number;
@@ -178,13 +179,13 @@ function extractResultMetrics(messages: SDKMessage[]): {
   const modelUsage = resultMsg?.modelUsage;
   const cacheReadTokens = modelUsage
     ? Object.values(modelUsage).reduce(
-        (sum, m) => sum + (m.cacheReadInputTokens ?? 0),
+        (sum, m) => sum + m.cacheReadInputTokens,
         0,
       )
     : 0;
   const cacheCreationTokens = modelUsage
     ? Object.values(modelUsage).reduce(
-        (sum, m) => sum + (m.cacheCreationInputTokens ?? 0),
+        (sum, m) => sum + m.cacheCreationInputTokens,
         0,
       )
     : 0;
@@ -301,11 +302,14 @@ export async function executeScenario(
         hookCollector.processMessage(message);
 
         // Capture errors for transcript
-        if (isErrorMessage(message)) {
+        // Note: SDK may send error messages not in its TypeScript union
+        if (isErrorMessage(message as unknown)) {
           errors.push({
             type: "error",
             error_type: "api_error",
-            message: message.error ?? "Unknown error",
+            message:
+              (message as unknown as { error?: string }).error ??
+              "Unknown error",
             timestamp: Date.now(),
             recoverable: false,
           });
@@ -465,11 +469,14 @@ export async function executeScenarioWithCheckpoint(
         }
 
         // Capture errors
-        if (isErrorMessage(message)) {
+        // Note: SDK may send error messages not in its TypeScript union
+        if (isErrorMessage(message as unknown)) {
           errors.push({
             type: "error",
             error_type: "api_error",
-            message: message.error ?? "Unknown error",
+            message:
+              (message as unknown as { error?: string }).error ??
+              "Unknown error",
             timestamp: Date.now(),
             recoverable: false,
           });

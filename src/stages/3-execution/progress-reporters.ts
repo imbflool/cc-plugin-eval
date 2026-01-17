@@ -124,7 +124,10 @@ export const verboseProgress: ProgressCallbacks = {
     }
 
     if (result.permission_denials.length > 0) {
-      console.log(`  Denials: ${result.permission_denials.join(", ")}`);
+      const denialNames = result.permission_denials
+        .map((d) => d.tool_name)
+        .join(", ");
+      console.log(`  Denials: ${denialNames}`);
     }
   },
 };
@@ -440,7 +443,7 @@ export function createSanitizedVerboseProgress(
       if (result.permission_denials.length > 0) {
         // Sanitize denial messages (may contain user input)
         const sanitizedDenials = result.permission_denials
-          .map((d) => sanitize(d))
+          .map((d) => sanitize(d.tool_name))
           .join(", ");
         console.log(`  Denials: ${sanitizedDenials}`);
       }

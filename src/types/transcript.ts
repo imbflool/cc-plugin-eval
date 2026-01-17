@@ -3,6 +3,11 @@
  * Represents execution transcripts from Agent SDK runs.
  */
 
+import type { SDKPermissionDenial } from "@anthropic-ai/claude-agent-sdk";
+
+// Re-export for convenience
+export type { SDKPermissionDenial };
+
 /**
  * Per-model usage metrics from SDK.
  * Tracks token usage and costs for each model used in a scenario.
@@ -185,7 +190,7 @@ export interface ExecutionResult {
   api_duration_ms: number;
   num_turns: number;
   /** Track hook denials */
-  permission_denials: string[];
+  permission_denials: SDKPermissionDenial[];
   /** Track errors */
   errors: TranscriptErrorEvent[];
   /** Captured hook responses from SDK messages */

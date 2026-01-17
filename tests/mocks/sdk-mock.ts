@@ -17,6 +17,7 @@ import type {
   SDKResultMessage,
   SDKErrorMessage,
   SDKToolResultMessage,
+  SDKPermissionDenial,
   QueryObject,
   QueryInput,
   PreToolUseHookConfig,
@@ -68,7 +69,7 @@ export interface MockQueryConfig {
   numTurns?: number;
 
   /** Permission denials to report */
-  permissionDenials?: string[];
+  permissionDenials?: SDKPermissionDenial[];
 
   /** Custom messages to inject */
   customMessages?: SDKMessage[];
@@ -241,14 +242,27 @@ export function createMockQueryFn(config: MockQueryConfig = {}): QueryFunction {
       messages.push(...config.customMessages);
     }
 
-    // 6. Result message
-    const resultMsg: SDKResultMessage = {
-      type: "result",
+    // 6. Result message (matches SDKResultSuccess structure)
+    const resultMsg = {
+      type: "result" as const,
+      subtype: "success" as const,
       total_cost_usd: config.costUsd ?? MOCK_DEFAULTS.costUsd,
       duration_ms: config.durationMs ?? MOCK_DEFAULTS.durationMs,
+      duration_api_ms: config.durationMs ?? MOCK_DEFAULTS.durationMs,
+      is_error: false,
       num_turns: config.numTurns ?? MOCK_DEFAULTS.numTurns,
+      result: "Mock execution completed",
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+      modelUsage: {},
       permission_denials: config.permissionDenials ?? [],
-    };
+      uuid: `mock-uuid-${Date.now()}` as `${string}-${string}-${string}-${string}-${string}`,
+      session_id: config.sessionId ?? MOCK_DEFAULTS.sessionId,
+    } satisfies SDKResultMessage;
     messages.push(resultMsg);
 
     // Helper to call PreToolUse hooks for a tool

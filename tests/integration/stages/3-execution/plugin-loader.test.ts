@@ -52,9 +52,10 @@ function createPluginLoadQueryFn(
       };
       messages.push(errorMsg);
     } else if (!config.noInitMessage) {
-      const initMsg: SDKSystemMessage = {
-        type: "system",
-        subtype: "init",
+      // Create mock system init message with all required SDK fields
+      const initMsg = {
+        type: "system" as const,
+        subtype: "init" as const,
         session_id: config.sessionId ?? "test-session-123",
         tools: allTools,
         slash_commands: config.slashCommands ?? ["/commit", "/review-pr"],
@@ -64,8 +65,17 @@ function createPluginLoadQueryFn(
             path: config.pluginPath ?? input.options?.plugins?.[0]?.path ?? "",
           },
         ],
-        ...(config.mcpServers ? { mcp_servers: config.mcpServers } : {}),
-      };
+        mcp_servers: config.mcpServers ?? [],
+        // Additional required SDK fields
+        apiKeySource: "user" as const,
+        claude_code_version: "1.0.0-test",
+        cwd: "/tmp/test",
+        model: "claude-sonnet-4-20250514",
+        permissionMode: "default" as const,
+        output_style: "concise",
+        skills: [],
+        uuid: "mock-uuid-123" as `${string}-${string}-${string}-${string}-${string}`,
+      } satisfies SDKSystemMessage;
       messages.push(initMsg);
     }
 
@@ -339,9 +349,9 @@ describe("verifyPluginLoad", () => {
     const queryFn = (input: QueryInput): QueryObject => {
       const pluginPath = input.options?.plugins?.[0]?.path ?? "";
 
-      const initMsg: SDKSystemMessage = {
-        type: "system",
-        subtype: "init",
+      const initMsg = {
+        type: "system" as const,
+        subtype: "init" as const,
         session_id: "test-session",
         tools: [],
         slash_commands: [],
@@ -351,7 +361,16 @@ describe("verifyPluginLoad", () => {
             path: `/some/prefix${pluginPath}`, // Path with prefix
           },
         ],
-      };
+        mcp_servers: [],
+        apiKeySource: "user" as const,
+        claude_code_version: "1.0.0-test",
+        cwd: "/tmp/test",
+        model: "claude-sonnet-4-20250514",
+        permissionMode: "default" as const,
+        output_style: "concise",
+        skills: [],
+        uuid: "mock-uuid-123" as `${string}-${string}-${string}-${string}-${string}`,
+      } satisfies SDKSystemMessage;
 
       return {
         [Symbol.asyncIterator]: async function* () {

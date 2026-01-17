@@ -218,7 +218,10 @@ describe("verboseProgress", () => {
       cost_usd: 0.01,
       api_duration_ms: 100,
       num_turns: 1,
-      permission_denials: ["Write", "Bash"],
+      permission_denials: [
+        { tool_name: "Write", tool_use_id: "tu_1", tool_input: {} },
+        { tool_name: "Bash", tool_use_id: "tu_2", tool_input: {} },
+      ],
       errors: [],
     };
 
@@ -567,13 +570,19 @@ describe("createSanitizedVerboseProgress", () => {
       cost_usd: 0.01,
       api_duration_ms: 100,
       num_turns: 1,
-      permission_denials: ["Denied access for user@test.com"],
+      permission_denials: [
+        {
+          tool_name: "Denied access for user@test.com",
+          tool_use_id: "tu_1",
+          tool_input: {},
+        },
+      ],
       errors: [],
     };
 
     callbacks.onScenarioComplete!(result, 1, 10);
 
-    // Permission denial should have email redacted
+    // Permission denial tool_name should have email redacted
     expect(logSpy).toHaveBeenCalledWith(
       expect.stringContaining("[REDACTED_EMAIL]"),
     );

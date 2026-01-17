@@ -327,11 +327,13 @@ async function executeScenarioWithRetry(
       }
 
       // Capture errors
-      if (isErrorMessage(message)) {
+      // Note: SDK may send error messages not in its TypeScript union
+      if (isErrorMessage(message as unknown)) {
         scenarioErrors.push({
           type: "error",
           error_type: "api_error",
-          message: message.error ?? "Unknown error",
+          message:
+            (message as unknown as { error?: string }).error ?? "Unknown error",
           timestamp: Date.now(),
           recoverable: false,
         });

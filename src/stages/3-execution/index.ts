@@ -567,7 +567,10 @@ function saveTranscripts(
     // Sanitize permission denial messages (may contain user input)
     const permissionDenials =
       shouldSanitize && sanitizer
-        ? result.permission_denials.map((d) => sanitizer(d))
+        ? result.permission_denials.map((d) => ({
+            ...d,
+            tool_name: sanitizer(d.tool_name),
+          }))
         : result.permission_denials;
 
     const filename = `${transcriptsDir}/${result.scenario_id}.json`;

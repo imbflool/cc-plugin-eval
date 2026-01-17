@@ -17,6 +17,14 @@ import {
   type PermissionMode,
   type SettingSource,
   type SDKUserMessage as SDKUserMessageType,
+  // Import SDK message types directly
+  type SDKMessage as SDKMessageType,
+  type SDKAssistantMessage as SDKAssistantMessageType,
+  type SDKResultMessage as SDKResultMessageType,
+  type SDKResultSuccess,
+  type SDKResultError,
+  type SDKSystemMessage as SDKSystemMessageType,
+  type SDKPermissionDenial,
 } from "@anthropic-ai/claude-agent-sdk";
 
 // Import types from the types layer
@@ -28,42 +36,20 @@ export type { PermissionMode, SettingSource, ModelUsage };
 // Re-export the query function for use throughout Stage 3
 export { query };
 
-// Re-export SDK types
+// Re-export SDK types directly
 export type SDKUserMessage = SDKUserMessageType;
-
-// Re-export types from the SDK
-// Note: The SDK may not export all types, so we define compatible interfaces
-// for types that aren't exported.
-
-/**
- * SDK message base type.
- */
-export interface SDKMessage {
-  type: string;
-  [key: string]: unknown;
-}
-
-/**
- * SDK assistant message.
- */
-export interface SDKAssistantMessage extends SDKMessage {
-  type: "assistant";
-  message: {
-    role: "assistant";
-    content: {
-      type: "text" | "tool_use";
-      text?: string;
-      id?: string;
-      name?: string;
-      input?: unknown;
-    }[];
-  };
-}
+export type SDKMessage = SDKMessageType;
+export type SDKAssistantMessage = SDKAssistantMessageType;
+export type SDKResultMessage = SDKResultMessageType;
+export type SDKSystemMessage = SDKSystemMessageType;
+export type { SDKResultSuccess, SDKResultError, SDKPermissionDenial };
 
 /**
  * SDK tool result message.
+ * Note: This type is not directly exported by the SDK, so we define it here
+ * based on the expected structure.
  */
-export interface SDKToolResultMessage extends SDKMessage {
+export interface SDKToolResultMessage {
   type: "tool_result";
   tool_use_id: string;
   content?: string;
@@ -71,42 +57,11 @@ export interface SDKToolResultMessage extends SDKMessage {
 }
 
 /**
- * SDK result message with metrics.
- */
-export interface SDKResultMessage extends SDKMessage {
-  type: "result";
-  total_cost_usd?: number;
-  duration_ms?: number;
-  num_turns?: number;
-  permission_denials?: string[];
-  /** Per-model usage breakdown. Keys are model IDs. */
-  modelUsage?: Record<string, ModelUsage>;
-}
-
-/**
- * SDK system init message.
- */
-export interface SDKSystemMessage extends SDKMessage {
-  type: "system";
-  subtype?: "init";
-  session_id?: string;
-  tools?: string[];
-  slash_commands?: string[];
-  plugins?: {
-    name: string;
-    path: string;
-  }[];
-  mcp_servers?: {
-    name: string;
-    status: string;
-    error?: string;
-  }[];
-}
-
-/**
  * SDK error message.
+ * Note: This type is not directly exported by the SDK, so we define it here
+ * based on the expected structure.
  */
-export interface SDKErrorMessage extends SDKMessage {
+export interface SDKErrorMessage {
   type: "error";
   error?: string;
 }
@@ -279,7 +234,7 @@ export interface QueryObject extends AsyncIterable<SDKMessage> {
  * Type guard for user message.
  */
 export function isUserMessage(msg: SDKMessage): msg is SDKUserMessage {
-  return msg.type === "user" && typeof msg["message"] === "object";
+  return msg.type === "user" && typeof msg.message === "object";
 }
 
 /**
@@ -288,16 +243,21 @@ export function isUserMessage(msg: SDKMessage): msg is SDKUserMessage {
 export function isAssistantMessage(
   msg: SDKMessage,
 ): msg is SDKAssistantMessage {
-  return msg.type === "assistant" && typeof msg["message"] === "object";
+  return msg.type === "assistant" && typeof msg.message === "object";
 }
 
 /**
  * Type guard for tool result message.
+ * Note: This message type is not part of SDK's SDKMessage union,
+ * but may appear in the message stream.
  */
-export function isToolResultMessage(
-  msg: SDKMessage,
-): msg is SDKToolResultMessage {
-  return msg.type === "tool_result" && typeof msg["tool_use_id"] === "string";
+export function isToolResultMessage(msg: unknown): msg is SDKToolResultMessage {
+  return (
+    typeof msg === "object" &&
+    msg !== null &&
+    (msg as { type?: string }).type === "tool_result" &&
+    typeof (msg as { tool_use_id?: string }).tool_use_id === "string"
+  );
 }
 
 /**
@@ -305,6 +265,36 @@ export function isToolResultMessage(
  */
 export function isResultMessage(msg: SDKMessage): msg is SDKResultMessage {
   return msg.type === "result";
+}
+
+/**
+ * Type guard for successful result message.
+ *
+ * @example
+ * ```typescript
+ * if (isResultMessage(msg) && isResultSuccess(msg)) {
+ *   console.log(msg.result); // Access success-specific fields
+ * }
+ * ```
+ */
+export function isResultSuccess(
+  msg: SDKResultMessage,
+): msg is SDKResultSuccess {
+  return msg.subtype === "success";
+}
+
+/**
+ * Type guard for error result message.
+ *
+ * @example
+ * ```typescript
+ * if (isResultMessage(msg) && isResultError(msg)) {
+ *   console.error(msg.errors); // Access error-specific fields
+ * }
+ * ```
+ */
+export function isResultError(msg: SDKResultMessage): msg is SDKResultError {
+  return msg.subtype !== "success";
 }
 
 /**
@@ -316,9 +306,15 @@ export function isSystemMessage(msg: SDKMessage): msg is SDKSystemMessage {
 
 /**
  * Type guard for error message.
+ * Note: This message type is not part of SDK's SDKMessage union,
+ * but may appear in the message stream.
  */
-export function isErrorMessage(msg: SDKMessage): msg is SDKErrorMessage {
-  return msg.type === "error";
+export function isErrorMessage(msg: unknown): msg is SDKErrorMessage {
+  return (
+    typeof msg === "object" &&
+    msg !== null &&
+    (msg as { type?: string }).type === "error"
+  );
 }
 
 /**

